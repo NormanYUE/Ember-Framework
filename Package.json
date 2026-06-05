@@ -1,0 +1,7 @@
+{
+  "name": "com.ecsframework.jygames",
+  "version": "1.0.0",
+  "displayName": "ECS Framework",
+  "description": "A powerful ECS framework",
+  "dependencies": {}
+}
