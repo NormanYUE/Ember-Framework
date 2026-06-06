@@ -1,7 +1,7 @@
 {
-  "name": "com.ecsframework.jygames",
-  "version": "1.0.0",
-  "displayName": "ECS Framework",
+  "name": "com.ecsframework.ember",
+  "version": "1.0.1",
+  "displayName": "Ember ECS",
   "description": "A powerful ECS framework",
   "dependencies": {}
 }
