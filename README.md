@@ -14,7 +14,8 @@
 9. [延迟命令缓冲区（ECB）](#9-延迟命令缓冲区ecb)
 10. [延迟销毁](#10-延迟销毁)
 11. [系统组合（SystemGroup）](#11-系统组合systemgroup)
-12. [架构概览](#12-架构概览)
+12. [性能与诊断](#12-性能与诊断)
+13. [架构概览](#13-架构概览)
 
 ---
 
@@ -166,7 +167,8 @@ Entity entity = world.CreateEntity();
 
 // 创建带初始组件的实体
 var mask = new ComponentMask();
-mask.With<Health>().With<Position>();
+mask.Add<Health>();
+mask.Add<Position>();
 Entity player = world.CreateEntity(mask);
 
 // 检查实体是否存活
@@ -197,6 +199,10 @@ if (world.HasComponent<Health>(entity)) { ... }
 
 // 移除组件
 world.RemoveComponent<DeadTag>(entity);
+
+// 批量结构变化：同一批实体加/删同一个组件时优先使用
+world.AddComponentBatch(entities, new Health { Current = 100, Max = 100 });
+world.RemoveComponentBatch<DeadTag>(entities);
 ```
 
 ### 3.3 高性能 int 索引访问
@@ -770,9 +776,80 @@ manager.Start();
 
 ---
 
-## 12. 架构概览
+## 12. 性能与诊断
 
-### 12.1 存储模型
+### 12.1 热路径建议
+
+优先在系统中使用 `Chunk.GetColumn<T>()` 做列式读写。`World.GetComponent<T>(Entity)` 和 `World.GetComponent<T>(int)` 适合少量随机访问；对同一查询结果批量处理时，不要在内层循环反复走 `World.GetComponent`。
+
+结构变化会触发 archetype 迁移、共享组件复制、旧 chunk swap-back 和实体记录更新。对同一批实体添加或移除同一个组件时，优先使用：
+
+```csharp
+world.AddComponentBatch(entities, value);
+world.RemoveComponentBatch<MyComponent>(entities);
+```
+
+`ITagComponent` 没有数据列，但 add/remove tag 仍然是结构变化。高频状态切换不要用频繁添加/移除 tag 表达，优先使用普通数据组件中的 `bool` 或 `enum` 字段。
+
+### 12.2 ComponentMask API
+
+`ComponentMask` 是可变 struct。`With<T>()` / `Without<T>()` 会修改当前变量并返回它，适合链式构造：
+
+```csharp
+var queryMask = new ComponentMask()
+    .With<Health>()
+    .With<Position>();
+```
+
+如果需要从已有 mask 派生新 mask，不要直接对原变量调用 `With<T>()`。使用不可污染原变量的 API：
+
+```csharp
+var baseMask = new ComponentMask().With<Health>();
+var energyMask = baseMask.WithAdded<Energy>();
+var withoutEnergy = energyMask.WithRemoved<Energy>();
+```
+
+需要明确原地修改时，使用：
+
+```csharp
+baseMask.Add<Position>();
+baseMask.Remove<DeadTag>();
+```
+
+### 12.3 ProfilerMarker
+
+框架内置 Unity Profiler marker，但默认生产包不编译 marker 代码，避免空跑分析逻辑。需要分析时用 MSBuild 属性启用：
+
+```bash
+dotnet build -c Release /p:EmberEnableProfiling=true
+```
+
+启用后 marker 名称保持稳定，便于 Unity Profiler 过滤：
+
+- `Ember.World.GetChunks`
+- `Ember.QueryCache.Rebuild`
+- `Ember.World.MigrateEntity`
+- `Ember.Chunk.MoveEntityTo`
+- `Ember.Chunk.RemoveAtSwapBack`
+- `Ember.World.AddComponent`
+- `Ember.World.RemoveComponent`
+- `Ember.SystemTicker.Tick`
+
+### 12.4 微基准
+
+仓库包含框架微基准工程：
+
+```bash
+dotnet build tests/Performance/Ember.Performance.csproj -c Release
+```
+
+基准覆盖组件读写、chunk 列访问、query cache、AddComponent/RemoveComponent、tag add/remove、批量结构变化和 GC allocation。基准使用真实 `World` / `Chunk` / `Unity.Collections.NativeArray` 路径，实际跑分需要 Unity 兼容运行时；普通 .NET CLI 可编译工程，但不能执行 Unity native ECall-backed `NativeArray` 分配。cached query 与 chunk column 读写应保持 0 GC。
+
+---
+
+## 13. 架构概览
+
+### 13.1 存储模型
 
 ```
 ECSManager (系统管理)
@@ -787,7 +864,7 @@ ECSManager (系统管理)
       │    ├── ArchetypeLayout   类型 → 列索引/偏移量 O(1) 查找
       │    └── Chunk[]           128 实体/块，SOA 布局
       │         └── NativeArray<byte>   连续内存，按组件类型分区（Tag 无数据列）
-      ├── QueryCache[]           查询缓存（Archetype 版本号失效）
+      ├── QueryCache             查询缓存（按 EntityQueryKey 字典查找，Archetype 版本号失效）
       ├── BufferStore<T>         动态缓冲区池
       ├── BufferElement          实体级缓冲区元素（IBufferElement）
       └── Singleton              单例实体映射
@@ -802,7 +879,7 @@ SystemTicker (系统调度)
  └── Dispose()                  OnDestroy + 清理
 ```
 
-### 12.2 组件类型语义
+### 13.2 组件类型语义
 
 | 类型 | 存储 | 查询 | 数据访问 |
 |------|------|------|---------|
@@ -811,7 +888,7 @@ SystemTicker (系统调度)
 | `ISingletonComponent` | 同数据组件 | ✓ | 全局唯一实体 |
 | `IBufferElement` | 实体级动态数组 | ✗ | `GetBufferElement<T>` |
 
-### 12.3 系统调度
+### 13.3 系统调度
 
 ```
 ECSManager.CreateTicker()
@@ -841,7 +918,7 @@ ECSManager.Dispose()
   → World.Dispose() → 清理 ECS 数据
 ```
 
-### 12.4 关键类型关系
+### 13.4 关键类型关系
 
 ```
 IComponent
