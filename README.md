@@ -303,13 +303,75 @@ public class InputSystem : SystemBase
 }
 ```
 
-### 4.5 结构变更规则
+### 4.5 ComponentPack
+
+当一个系统需要把查询结果打包成连续数组做高频计算，再批量写回组件列时，可以使用 `SystemContext.Pack<TItem, TAdapter>()`。Pack 会复用 compiled query、列 accessor、内部 item 数组和 chunk range；每帧 `Build()` / `WriteBack()` 不会重新创建 pack 对象。
+
+```csharp
+public struct AgentItem
+{
+    public float X;
+    public float Y;
+    public float VX;
+    public float VY;
+}
+
+public struct AgentPackAdapter : IComponentPackAdapter<AgentItem>
+{
+    public ComponentPackDescriptor Describe()
+    {
+        return ComponentPackDescriptor.Create()
+            .Read<Position>()
+            .Read<Velocity>()
+            .Write<Position>()
+            .Write<Velocity>()
+            .None<DeadTag>();
+    }
+
+    public void Read(in PackReadContext ctx, int row, ref AgentItem item)
+    {
+        ref readonly var position = ref ctx.Read<Position>(row);
+        ref readonly var velocity = ref ctx.Read<Velocity>(row);
+        item.X = position.X;
+        item.Y = position.Y;
+        item.VX = velocity.X;
+        item.VY = velocity.Y;
+    }
+
+    public void Write(in PackWriteContext ctx, int row, in AgentItem item)
+    {
+        ref var position = ref ctx.Write<Position>(row);
+        ref var velocity = ref ctx.Write<Velocity>(row);
+        position.X = item.X;
+        position.Y = item.Y;
+        velocity.X = item.VX;
+        velocity.Y = item.VY;
+    }
+}
+
+public class AgentSystem : SystemBase
+{
+    protected override void OnTick(SystemContext ctx)
+    {
+        var pack = ctx.Pack<AgentItem, AgentPackAdapter>();
+        pack.Build();
+
+        AgentSolver.Apply(pack.Items, pack.Count, ctx.DeltaTime);
+
+        pack.WriteBack();
+    }
+}
+```
+
+`Read<T>()` 只能读取 adapter 在 `Describe()` 中声明为 `Read<T>()` 的组件，`Write<T>()` 只能写入声明为 `Write<T>()` 的组件。`Build()` 和 `WriteBack()` 之间不能发生结构变化，否则 `WriteBack()` 会抛出明确异常。
+
+### 4.6 结构变更规则
 
 普通系统不需要声明组件访问模式，也不需要声明是否会执行结构变更。Ticker 默认按注册顺序保守执行系统，保证上一系统的变更对下一系统可见。
 
 唯一需要注意的是：不要在 `SystemContext.QueryChunks(...)`、`EcsAPI.Query(...).AsRows()` 或其他 query 遍历过程中直接创建/销毁实体、添加/移除组件。遍历中需要结构变更时，先记录到列表或 `EntityCommandBuffer`，遍历结束后再执行。
 
-### 4.6 初始化系统（runOnce）
+### 4.7 初始化系统（runOnce）
 
 通过 `runOnce: true` 注册，系统只执行一次后自动移除：
 
@@ -828,7 +890,7 @@ dotnet build -c Release /p:EmberEnableProfiling=true
 dotnet build tests/Performance/Ember.Performance.csproj -c Release
 ```
 
-基准覆盖组件读写、chunk 列访问、query cache、AddComponent/RemoveComponent、tag add/remove、批量结构变化和 GC allocation。基准使用真实 `World` / `Chunk` / `Unity.Collections.NativeArray` 路径，实际跑分需要 Unity 兼容运行时；普通 .NET CLI 可编译工程，但不能执行 Unity native ECall-backed `NativeArray` 分配。cached query 与 chunk column 读写应保持 0 GC。
+基准覆盖组件读写、chunk 列访问、query cache、AddComponent/RemoveComponent、tag add/remove、批量结构变化、ComponentPack 和 GC allocation。基准使用真实 `World` / `Chunk` / `Unity.Collections.NativeArray` 路径，实际跑分需要 Unity 兼容运行时；普通 .NET CLI 可编译工程，但不能执行 Unity native ECall-backed `NativeArray` 分配。cached query、chunk column 读写与 warmed ComponentPack build/write 应保持 0 GC。
 
 ---
 
