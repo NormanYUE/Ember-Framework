@@ -11,9 +11,32 @@ namespace Ember.Editor
     /// </summary>
     public class EmberMCPWindow : EditorWindow
     {
-        private static readonly string s_HomeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        private static readonly string s_ServerPath = Path.GetFullPath(
-            Path.Combine(Application.dataPath, "..", "Packages", "com.ember.ecs", "Tools~", "Ember.Mcp.Server.dll"));
+        private static readonly string s_ProjectRoot = Path.GetFullPath(
+            Path.Combine(Application.dataPath, ".."));
+
+        /// <summary>DLL 相对于项目根目录的路径（跨项目通用）。</summary>
+        private static readonly Lazy<string> s_RelativeServerPath = new(() =>
+        {
+            string pkgPath = Path.Combine(s_ProjectRoot, "Packages", "com.ember.ecs");
+            if (!Directory.Exists(pkgPath))
+            {
+                var cacheDir = Path.Combine(s_ProjectRoot, "Library", "PackageCache");
+                if (Directory.Exists(cacheDir))
+                {
+                    foreach (var d in Directory.GetDirectories(cacheDir, "com.ember.ecs@*"))
+                    {
+                        pkgPath = d;
+                        break;
+                    }
+                }
+            }
+
+            return Path.Combine(
+                Path.GetRelativePath(s_ProjectRoot, pkgPath),
+                "Tools~", "Ember.Mcp.Server.dll");
+        });
+
+        private static string RelativeServerPath => s_RelativeServerPath.Value;
 
         private readonly List<LogEntry> m_Log = new();
         private Vector2 m_LogScroll;
@@ -73,7 +96,6 @@ namespace Ember.Editor
             if (m_SettingsExpanded) DrawSettings();
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            // Refresh log from bridge
             if (EmberBridge.RequestCount > m_Log.Count ||
                 (m_Log.Count > 0 && m_Log[^1].Method != EmberBridge.LastRequest))
             {
@@ -101,20 +123,17 @@ namespace Ember.Editor
             bool running = EmberBridge.IsRunning;
             bool connected = EmberBridge.IsConnected;
 
-            // Status indicator
             GUI.color = connected ? Color.green : (running ? Color.yellow : Color.gray);
             EditorGUILayout.LabelField(connected ? "● Connected" : (running ? "◉ Waiting" : "○ Stopped"),
                 EditorStyles.boldLabel, GUILayout.Width(120));
             GUI.color = Color.white;
 
-            // Port info
             if (running)
                 EditorGUILayout.LabelField($"Port: {EmberBridge.ActivePort}", GUILayout.Width(80));
             EditorGUILayout.LabelField(Application.productName, EditorStyles.miniLabel);
 
             GUILayout.FlexibleSpace();
 
-            // Start / Stop button
             if (running)
             {
                 var origColor = GUI.backgroundColor;
@@ -124,6 +143,7 @@ namespace Ember.Editor
                     EmberBridge.Stop();
                     m_Log.Clear();
                 }
+
                 GUI.backgroundColor = origColor;
             }
             else
@@ -131,9 +151,7 @@ namespace Ember.Editor
                 var origColor = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0.3f, 0.7f, 0.3f);
                 if (GUILayout.Button("Start Server", GUILayout.Width(90)))
-                {
                     EmberBridge.Start();
-                }
                 GUI.backgroundColor = origColor;
             }
 
@@ -147,49 +165,54 @@ namespace Ember.Editor
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            DrawClientRow("Claude Code",
-                Path.Combine(s_HomeDir, ".claude", "settings.json"),
-                ".claude/settings.json (project)");
+            // Claude Code — project-level config
+            string ccProjectConfig = Path.Combine(s_ProjectRoot, ".claude", "settings.json");
+            DrawClientRow("Claude Code", ccProjectConfig);
 
-            DrawClientRow("Codex",
-                Path.Combine(s_HomeDir, ".codex", "config.toml"),
-                ".codex/config.toml (project)");
+            // Codex — project-level config
+            string codexProjectConfig = Path.Combine(s_ProjectRoot, ".codex", "config.toml");
+            DrawClientRow("Codex", codexProjectConfig);
 
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawClientRow(string clientName, string globalPath, string projectRelPath)
+        private void DrawClientRow(string clientName, string configPath)
         {
             EditorGUILayout.BeginHorizontal();
 
-            bool globalExists = File.Exists(globalPath);
-            bool hasEmberGlobal = globalExists && ConfigHasEmber(globalPath);
-            string status = hasEmberGlobal ? "● Installed" : (globalExists ? "○ Not installed" : "— No config");
+            bool configExists = File.Exists(configPath);
+            bool hasEmber = configExists && ConfigHasEmber(configPath);
+            string status = hasEmber ? "● Installed"
+                : (configExists ? "○ Not installed" : "— No config");
 
             EditorGUILayout.LabelField(clientName, GUILayout.Width(100));
-            GUI.color = hasEmberGlobal ? Color.green : Color.gray;
-            EditorGUILayout.LabelField(status, GUILayout.Width(120));
+            GUI.color = hasEmber ? Color.green : Color.gray;
+            EditorGUILayout.LabelField(status, GUILayout.Width(130));
             GUI.color = Color.white;
 
-            if (hasEmberGlobal)
+            EditorGUILayout.LabelField(
+                configPath.Replace(s_ProjectRoot, "").TrimStart('/'),
+                EditorStyles.miniLabel);
+
+            GUILayout.FlexibleSpace();
+
+            if (hasEmber)
             {
                 if (GUILayout.Button("Uninstall", GUILayout.Width(70)))
-                {
-                    RemoveEmberFromConfig(globalPath);
-                }
+                    RemoveEmberFromConfig(configPath);
             }
             else
             {
                 if (GUILayout.Button("Install", GUILayout.Width(70)))
-                {
-                    InstallEmberToConfig(globalPath, clientName);
-                }
+                    InstallEmberToConfig(configPath, clientName);
             }
 
             EditorGUILayout.EndHorizontal();
         }
 
-        private bool ConfigHasEmber(string configPath)
+        // ── Config helpers ──
+
+        private static bool ConfigHasEmber(string configPath)
         {
             try
             {
@@ -199,14 +222,13 @@ namespace Ember.Editor
                     var servers = SimpleJson.GetObject(content, "mcpServers");
                     return servers != null && SimpleJson.HasKey(servers, "ember");
                 }
-                else if (configPath.EndsWith(".toml"))
-                {
-                    return content.Contains("[mcp_servers.ember]") ||
-                           content.Contains("\"ember\"");
-                }
+
+                if (configPath.EndsWith(".toml"))
+                    return content.Contains("[mcp_servers.ember]") || content.Contains("\"ember\"");
+
+                return false;
             }
-            catch { }
-            return false;
+            catch { return false; }
         }
 
         private void InstallEmberToConfig(string configPath, string clientName)
@@ -214,39 +236,73 @@ namespace Ember.Editor
             try
             {
                 bool isToml = configPath.EndsWith(".toml");
+                string port = EmberBridge.ActivePort > 0
+                    ? EmberBridge.ActivePort.ToString()
+                    : "9090";
 
-                if (File.Exists(configPath))
+                // Always write project-level config with relative path
+                string entry;
+                if (isToml)
                 {
-                    // Append to existing config
-                    string content = File.ReadAllText(configPath);
-                    if (content.Contains("\"ember\"") || content.Contains("[mcp_servers.ember]"))
-                        return; // already installed
-
-                    string entry = isToml
-                        ? $"\n[mcp_servers.ember]\ncommand = \"dotnet\"\nargs = [\"exec\", \"{s_ServerPath}\", \"--port\", \"{EmberBridge.ActivePort}\"]\n"
-                        : content.TrimEnd().EndsWith("}")
-                            ? content.TrimEnd().TrimEnd('}').TrimEnd() +
-                              $",\n  \"mcpServers\": {{\n    \"ember\": {{\n      \"command\": \"dotnet\",\n      \"args\": [\"exec\", \"{s_ServerPath}\", \"--port\", \"{EmberBridge.ActivePort}\"]\n    }}\n  }}\n}}"
-                            : content;
-
-                    File.Copy(configPath, configPath + ".bak", true);
-                    File.WriteAllText(configPath, entry);
+                    entry = $"command = \"dotnet\"\nargs = [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n";
                 }
                 else
                 {
-                    // Create new config
+                    entry = "{\n  \"mcpServers\": {\n    \"ember\": {\n" +
+                            $"      \"command\": \"dotnet\",\n" +
+                            $"      \"args\": [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n" +
+                            "    }\n  }\n}\n";
+                }
+
+                // Backup existing
+                if (File.Exists(configPath))
+                {
+                    string existing = File.ReadAllText(configPath);
+                    if (ConfigHasEmber(configPath))
+                    {
+                        EditorUtility.DisplayDialog("Ember MCP", "Already installed.", "OK");
+                        return;
+                    }
+
+                    // Merge: insert ember entry before the last closing brace
+                    File.Copy(configPath, configPath + ".bak", true);
+
+                    if (isToml)
+                    {
+                        File.AppendAllText(configPath, "\n[mcp_servers.ember]\n" + entry);
+                    }
+                    else
+                    {
+                        // Insert before final }
+                        int lastBrace = existing.LastIndexOf('}');
+                        if (lastBrace >= 0)
+                        {
+                            string merged = existing.Insert(lastBrace,
+                                $",\n  \"mcpServers\": " +
+                                $"{{\n    \"ember\": {{\n" +
+                                $"      \"command\": \"dotnet\",\n" +
+                                $"      \"args\": [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n" +
+                                "    }}\n  }}");
+                            File.WriteAllText(configPath, merged);
+                        }
+                    }
+                }
+                else
+                {
                     string dir = Path.GetDirectoryName(configPath);
                     if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
                     string newConfig = isToml
-                        ? $"[mcp_servers.ember]\ncommand = \"dotnet\"\nargs = [\"exec\", \"{s_ServerPath}\", \"--port\", \"{EmberBridge.ActivePort}\"]\n"
-                        : $"{{\n  \"mcpServers\": {{\n    \"ember\": {{\n      \"command\": \"dotnet\",\n      \"args\": [\"exec\", \"{s_ServerPath}\", \"--port\", \"{EmberBridge.ActivePort}\"]\n    }}\n  }}\n}}\n";
+                        ? $"[mcp_servers.ember]\n{entry}"
+                        : entry;
 
                     File.WriteAllText(configPath, newConfig);
                 }
 
                 EditorUtility.DisplayDialog("Ember MCP",
-                    $"Installed to {clientName}.\nRestart {clientName} for changes to take effect.", "OK");
+                    $"Installed to {configPath}.\n" +
+                    $"Path: {RelativeServerPath}\n" +
+                    $"Restart {clientName} for changes to take effect.", "OK");
             }
             catch (Exception ex)
             {
@@ -259,42 +315,42 @@ namespace Ember.Editor
             try
             {
                 string content = File.ReadAllText(configPath);
-                // Simple removal — find the ember server entry and remove it
-                int start = content.IndexOf("\"ember\"");
-                if (start < 0)
+                File.Copy(configPath, configPath + ".bak", true);
+
+                if (configPath.EndsWith(".toml"))
                 {
-                    start = content.IndexOf("[mcp_servers.ember]");
+                    int start = content.IndexOf("[mcp_servers.ember]");
                     if (start < 0) return;
-                    int end = content.IndexOf("[", start + 1);
+                    int end = content.IndexOf('[', start + 1);
                     if (end < 0) end = content.Length;
-                    content = content.Remove(start, end - start);
+                    content = content.Remove(start, end - start).TrimEnd();
                 }
                 else
                 {
-                    // JSON: remove the ember key and its value
-                    int braceDepth = 0;
-                    int end = start;
-                    for (int i = start; i < content.Length; i++)
+                    // Remove ", \"mcpServers\": { ... }" including the "ember" key
+                    // Simple approach: find "ember" key and remove its enclosing mcpServers block
+                    int serversIdx = content.IndexOf("\"mcpServers\"");
+                    if (serversIdx < 0) return;
+                    int braceStart = content.IndexOf('{', serversIdx);
+                    if (braceStart < 0) return;
+                    int depth = 0;
+                    int braceEnd = braceStart;
+                    for (int i = braceStart; i < content.Length; i++)
                     {
-                        if (content[i] == '{') braceDepth++;
-                        if (content[i] == '}') braceDepth--;
-                        if (braceDepth == 0)
-                        {
-                            end = i + 1;
-                            break;
-                        }
+                        if (content[i] == '{') depth++;
+                        else if (content[i] == '}') depth--;
+                        if (depth == 0) { braceEnd = i + 1; break; }
                     }
 
-                    // Backtrack to remove comma
-                    int commaBefore = content.LastIndexOf(',', start);
-                    content = commaBefore >= 0
-                        ? content.Remove(commaBefore, end - commaBefore)
-                        : content.Remove(start, end - start);
+                    // Remove comma before mcpServers if present
+                    int comma = content.LastIndexOf(',', serversIdx);
+                    if (comma >= 0 && comma > serversIdx - 10)
+                        content = content.Remove(comma, braceEnd - comma);
+                    else
+                        content = content.Remove(serversIdx, braceEnd - serversIdx);
                 }
 
-                File.Copy(configPath, configPath + ".bak", true);
                 File.WriteAllText(configPath, content);
-
                 EditorUtility.DisplayDialog("Ember MCP", "Uninstalled successfully.", "OK");
             }
             catch (Exception ex)
@@ -310,15 +366,14 @@ namespace Ember.Editor
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.LabelField("MCP Server", EditorStyles.boldLabel);
             EditorGUILayout.LabelField("Protocol", "JSON-lines over TCP");
-            EditorGUILayout.LabelField("Server Path", s_ServerPath);
+            EditorGUILayout.LabelField("Relative Path", RelativeServerPath);
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Mode", "Read + Write");
 
-            var manager = ECSManager.Active;
-            bool inPlayMode = EditorApplication.isPlaying;
-            GUI.color = inPlayMode ? Color.green : Color.yellow;
-            EditorGUILayout.LabelField(inPlayMode ? "(Play Mode — write enabled)" : "(Edit Mode — read only)",
+            GUI.color = EditorApplication.isPlaying ? Color.green : Color.yellow;
+            EditorGUILayout.LabelField(
+                EditorApplication.isPlaying ? "(Play Mode — write enabled)" : "(Edit Mode — read only)",
                 EditorStyles.miniLabel);
             GUI.color = Color.white;
             EditorGUILayout.EndHorizontal();
@@ -331,7 +386,6 @@ namespace Ember.Editor
         private void DrawRequestLog()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
             m_LogScroll = EditorGUILayout.BeginScrollView(m_LogScroll, GUILayout.Height(200));
 
             for (int i = m_Log.Count - 1; i >= 0; i--)
@@ -373,18 +427,14 @@ namespace Ember.Editor
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            // Auto Start
             EditorGUI.BeginChangeCheck();
             bool autoStart = EditorGUILayout.ToggleLeft("Auto Start on Launch", EmberBridge.AutoStart);
             if (EditorGUI.EndChangeCheck())
                 EmberBridge.AutoStart = autoStart;
 
-            // Port Range
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Port Range", GUILayout.Width(80));
-            EditorGUILayout.LabelField("9090", GUILayout.Width(40));
-            EditorGUILayout.LabelField("—", GUILayout.Width(15));
-            EditorGUILayout.LabelField("9099", GUILayout.Width(40));
+            EditorGUILayout.LabelField("9090 — 9099");
             EditorGUILayout.EndHorizontal();
 
             if (EmberBridge.IsRunning)
