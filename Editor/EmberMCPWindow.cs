@@ -240,21 +240,13 @@ namespace Ember.Editor
                     ? EmberBridge.ActivePort.ToString()
                     : "9090";
 
-                // Always write project-level config with relative path
-                string entry;
-                if (isToml)
-                {
-                    entry = $"command = \"dotnet\"\nargs = [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n";
-                }
-                else
-                {
-                    entry = "{\n  \"mcpServers\": {\n    \"ember\": {\n" +
-                            $"      \"command\": \"dotnet\",\n" +
-                            $"      \"args\": [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n" +
-                            "    }\n  }\n}\n";
-                }
+                string emberBlock = isToml
+                    ? $"[mcp_servers.ember]\ncommand = \"dotnet\"\nargs = [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n"
+                    : $"    \"ember\": {{\n" +
+                      $"      \"command\": \"dotnet\",\n" +
+                      $"      \"args\": [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n" +
+                      "    }";
 
-                // Backup existing
                 if (File.Exists(configPath))
                 {
                     string existing = File.ReadAllText(configPath);
@@ -264,25 +256,40 @@ namespace Ember.Editor
                         return;
                     }
 
-                    // Merge: insert ember entry before the last closing brace
                     File.Copy(configPath, configPath + ".bak", true);
 
                     if (isToml)
                     {
-                        File.AppendAllText(configPath, "\n[mcp_servers.ember]\n" + entry);
+                        File.AppendAllText(configPath, "\n" + emberBlock);
                     }
                     else
                     {
-                        // Insert before final }
-                        int lastBrace = existing.LastIndexOf('}');
-                        if (lastBrace >= 0)
+                        // Check if mcpServers already exists
+                        int serversIdx = existing.IndexOf("\"mcpServers\"");
+                        if (serversIdx >= 0)
                         {
+                            // Insert ember inside existing mcpServers block
+                            int braceOpen = existing.IndexOf('{', serversIdx);
+                            int depth = 1;
+                            int i = braceOpen + 1;
+                            while (i < existing.Length && depth > 0)
+                            {
+                                if (existing[i] == '{') depth++;
+                                else if (existing[i] == '}') depth--;
+                                i++;
+                            }
+                            // Insert before closing } of mcpServers
+                            int insertPos = i - 1;
+                            string merged = existing.Insert(insertPos,
+                                $",\n{emberBlock}\n  ");
+                            File.WriteAllText(configPath, merged);
+                        }
+                        else
+                        {
+                            // Add mcpServers block before final }
+                            int lastBrace = existing.LastIndexOf('}');
                             string merged = existing.Insert(lastBrace,
-                                $",\n  \"mcpServers\": " +
-                                $"{{\n    \"ember\": {{\n" +
-                                $"      \"command\": \"dotnet\",\n" +
-                                $"      \"args\": [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n" +
-                                "    }}\n  }}");
+                                $",\n  \"mcpServers\": {{\n{emberBlock}\n  }}");
                             File.WriteAllText(configPath, merged);
                         }
                     }
@@ -293,15 +300,15 @@ namespace Ember.Editor
                     if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
                     string newConfig = isToml
-                        ? $"[mcp_servers.ember]\n{entry}"
-                        : entry;
+                        ? emberBlock
+                        : $"{{\n  \"mcpServers\": {{\n{emberBlock}\n  }}\n}}\n";
 
                     File.WriteAllText(configPath, newConfig);
                 }
 
                 EditorUtility.DisplayDialog("Ember MCP",
-                    $"Installed to {configPath}.\n" +
-                    $"Path: {RelativeServerPath}\n" +
+                    $"Installed to {configPath}\n" +
+                    $"Relative path: {RelativeServerPath}\n" +
                     $"Restart {clientName} for changes to take effect.", "OK");
             }
             catch (Exception ex)
