@@ -4,7 +4,6 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using UnityEditor;
 using UnityEngine;
@@ -50,13 +49,12 @@ namespace Ember.Editor
 
         // Thread-safe queue: background thread → main thread
         private static readonly ConcurrentQueue<PendingRequest> s_Queue = new();
-        private static readonly JsonSerializerOptions s_JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
         public struct PendingRequest
         {
             public string Id;
             public string Method;
-            public JsonElement? Params;
+            public string Params; // raw JSON string (or null)
         }
 
         static EmberBridge()
@@ -67,7 +65,6 @@ namespace Ember.Editor
 
         public static void Start()
         {
-            // Find available port
             ActivePort = -1;
             for (int port = PortStart; port <= PortEnd; port++)
             {
@@ -90,13 +87,8 @@ namespace Ember.Editor
             s_Running = true;
             s_Thread = new Thread(ListenLoop) { IsBackground = true, Name = "EmberBridge" };
             s_Thread.Start();
-
-            // Register main thread callback
             EditorApplication.update += ProcessQueue;
-
-            // Write instance file
             WriteInstanceFile();
-
             Debug.Log($"[Ember MCP] Bridge started on port {ActivePort}");
         }
 
@@ -116,14 +108,16 @@ namespace Ember.Editor
                         var line = s_Reader.ReadLine();
                         if (line == null) break;
 
-                        var request = JsonSerializer.Deserialize<BridgeRequest>(line, s_JsonOpts);
-                        if (request == null) continue;
+                        var id = SimpleJson.GetString(line, "id");
+                        var method = SimpleJson.GetString(line, "method");
+                        var args = SimpleJson.GetObject(line, "params");
+                        if (method == null) continue;
 
                         s_Queue.Enqueue(new PendingRequest
                         {
-                            Id = request.Id,
-                            Method = request.Method,
-                            Params = request.Params
+                            Id = id,
+                            Method = method,
+                            Params = args
                         });
                     }
                 }
@@ -133,10 +127,7 @@ namespace Ember.Editor
                 {
                     Debug.LogWarning($"[Ember MCP] Listener error: {ex.Message}");
                 }
-                finally
-                {
-                    CloseClient();
-                }
+                finally { CloseClient(); }
             }
         }
 
@@ -152,7 +143,7 @@ namespace Ember.Editor
                 {
                     result = EmberBridgeCommands.Execute(pending.Method, pending.Params);
                     LastRequest = pending.Method;
-                    LastResponse = result?.Substring(0, Math.Min(result.Length, 200));
+                    LastResponse = result?.Length > 200 ? result.Substring(0, 200) : result;
                 }
                 catch (Exception ex)
                 {
@@ -177,17 +168,18 @@ namespace Ember.Editor
                 if (s_Writer == null) return;
                 try
                 {
-                    var resp = new BridgeResponse
-                    {
-                        Id = id,
-                        Result = result != null ? JsonSerializer.Deserialize<JsonElement>(result) : null,
-                        Error = error
-                    };
-                    s_Writer.WriteLine(JsonSerializer.Serialize(resp, s_JsonOpts));
+                    var resp = SimpleJson.BuildJson(
+                        ("id", $"\"{id ?? "null"}\""),
+                        ("result", result ?? "null"),
+                        ("error", error != null ? $"\"{Escape(error)}\"" : "null")
+                    );
+                    s_Writer.WriteLine(resp);
                 }
                 catch { }
             }
         }
+
+        private static string Escape(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
         private static void CloseClient()
         {
@@ -217,37 +209,17 @@ namespace Ember.Editor
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ember");
                 Directory.CreateDirectory(dir);
                 var path = InstanceFile.Replace("~", dir);
-                var json = JsonSerializer.Serialize(new
-                {
-                    active = $"127.0.0.1:{ActivePort}",
-                    instances = new[]
-                    {
-                        new
-                        {
-                            project = Application.productName,
-                            port = ActivePort,
-                            pid = System.Diagnostics.Process.GetCurrentProcess().Id
-                        }
-                    }
-                });
+                var json = SimpleJson.BuildJson(
+                    ("active", $"\"127.0.0.1:{ActivePort}\""),
+                    ("instances", $"[{SimpleJson.BuildJson(
+                        ("project", $"\"{Application.productName}\""),
+                        ("port", ActivePort.ToString()),
+                        ("pid", System.Diagnostics.Process.GetCurrentProcess().Id.ToString())
+                    )}]")
+                );
                 File.WriteAllText(path, json);
             }
             catch { /* non-critical */ }
-        }
-
-        // Deserialization types
-        private struct BridgeRequest
-        {
-            public string Id { get; set; }
-            public string Method { get; set; }
-            public JsonElement? Params { get; set; }
-        }
-
-        private struct BridgeResponse
-        {
-            public string Id { get; set; }
-            public JsonElement? Result { get; set; }
-            public string Error { get; set; }
         }
     }
 }

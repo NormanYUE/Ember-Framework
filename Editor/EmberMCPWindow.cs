@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
 using UnityEditor;
 using UnityEngine;
 
@@ -197,15 +196,12 @@ namespace Ember.Editor
                 string content = File.ReadAllText(configPath);
                 if (configPath.EndsWith(".json"))
                 {
-                    using var doc = JsonDocument.Parse(content);
-                    return doc.RootElement.TryGetProperty("mcpServers", out var servers) &&
-                           servers.TryGetProperty("ember", out _);
+                    var servers = SimpleJson.GetObject(content, "mcpServers");
+                    return servers != null && SimpleJson.HasKey(servers, "ember");
                 }
                 else if (configPath.EndsWith(".toml"))
                 {
-                    // Simple TOML check for [mcp_servers.ember]
                     return content.Contains("[mcp_servers.ember]") ||
-                           content.Contains("[mcp_servers]\nember") ||
                            content.Contains("\"ember\"");
                 }
             }
