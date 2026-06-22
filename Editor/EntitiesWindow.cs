@@ -50,8 +50,6 @@ namespace Ember.Editor
             DrawEntityTable();
             EditorGUILayout.Space();
             DrawPagination();
-            EditorGUILayout.Space();
-            DrawComponentPanel(manager.World);
         }
 
         private void Refresh(ECSManager manager)
@@ -161,6 +159,7 @@ namespace Ember.Editor
                         EditorStyles.label, GUILayout.Width(120)))
                 {
                     m_SelectedIndex = i;
+                    NotifySelectionChanged();
                 }
 
                 EditorGUILayout.LabelField($"Arch #{entity.ArchetypeIndex}", GUILayout.Width(80));
@@ -198,16 +197,17 @@ namespace Ember.Editor
             EditorGUILayout.EndHorizontal();
         }
 
-        private void DrawComponentPanel(World world)
+        private void NotifySelectionChanged()
         {
             if (m_SelectedIndex < 0 || m_SelectedIndex >= m_FilteredEntities.Count)
                 return;
 
+            var manager = ECSManager.Active;
+            if (manager?.World == null) return;
+
             var entityInfo = m_FilteredEntities[m_SelectedIndex];
             var entity = new Entity(entityInfo.Index, entityInfo.Version);
-
-            EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
-            ComponentInspector.DrawEntityComponents(world, entity);
+            EntityInspectorWindow.Inspect(manager.World, entity);
         }
     }
 }

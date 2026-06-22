@@ -19,6 +19,12 @@ namespace Ember.Editor
             EntitiesWindow.Open();
         }
 
+        [MenuItem("Window/Ember/Entity Inspector")]
+        public static void OpenEntityInspectorWindow()
+        {
+            EntityInspectorWindow.Open();
+        }
+
         [MenuItem("Window/Ember/Archetypes")]
         public static void OpenArchetypesWindow()
         {
