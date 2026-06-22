@@ -209,14 +209,13 @@ namespace Ember.Editor
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ember");
                 Directory.CreateDirectory(dir);
                 var path = InstanceFile.Replace("~", dir);
+                var instJson = SimpleJson.BuildJson(
+                    ("project", $"\"{Application.productName}\""),
+                    ("port", ActivePort.ToString()),
+                    ("pid", System.Diagnostics.Process.GetCurrentProcess().Id.ToString()));
                 var json = SimpleJson.BuildJson(
                     ("active", $"\"127.0.0.1:{ActivePort}\""),
-                    ("instances", $"[{SimpleJson.BuildJson(
-                        ("project", $"\"{Application.productName}\""),
-                        ("port", ActivePort.ToString()),
-                        ("pid", System.Diagnostics.Process.GetCurrentProcess().Id.ToString())
-                    )}]")
-                );
+                    ("instances", $"[{instJson}]"));
                 File.WriteAllText(path, json);
             }
             catch { /* non-critical */ }
