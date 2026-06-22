@@ -7,6 +7,11 @@ All notable changes to the Ember ECS Framework.
 ### Added
 - **迭代中创建实体**：`SystemContext.CreateEntity()` 允许在 query 遍历中创建实体并立即获取真实 `Entity` 引用，chunk placement 自动延迟到 `foreach` 结束时执行。解决了 ECB 临时 ID 无法存入组件数据的限制。
 - **EntityRecord.Placed 标志**：区分已分配但尚未放入 chunk 的实体，所有组件访问方法对 pending 实体返回明确错误。
+- **ComponentPackAdapterGenerator**：编译期自动生成 `IComponentPackAdapter<T>.Describe()`，通过 Roslyn SemanticModel 分析 Read/Write 方法体中的 `ctx.Read<T>()` / `ctx.Write<T>()` 调用，消除手写 Describe() 与代码不一致的风险。与 `ComponentRegistrationGenerator` 同 DLL，支持 HybridCLR。
+- **Entity/Component 生命周期钩子**：`SystemBase` 新增 4 个 `protected virtual` 钩子——`OnEntityCreated`、`OnEntityDestroyed`、`OnComponentAdded`、`OnComponentRemoved`。按需 override，不 override = 零开销。World 维护独立监听者列表，精确投递。
+- **DeferredDestroy 自动 flush**：每个系统 Tick 结束后（ECB playback 之前）自动执行延迟销毁实体的真正销毁。之前标记了延迟销毁的实体只在 World.Dispose 全量销毁时才清理。
+- **World.cs 拆分**：1615 行拆为 10 个 partial 文件，按 #region 职责分文件，零逻辑改动。
+- **结构变更错误信息升级**：修复 `AddComponent<T>` 缺失的 `Placed` 守卫；数字 typeId 替换为组件类型名；Chunk 内部错误加上下文和 "this is a framework bug" 指引。
 
 ### Removed
 - **Aspect 子系统**：`IAspect`、`AspectRegistry`、`AspectQueryBuilder` 等全部移除。该功能从未被实际使用，查询统一通过 `SystemContext.QueryChunks()` / `EcsAPI.Query()` 完成。
@@ -26,6 +31,7 @@ All notable changes to the Ember ECS Framework.
 - **Native 内存泄漏**：修复 `World.Dispose()` 在异常场景下跳过 `DisposeBufferStores()` 和 `DisposeEcsCore()` 导致 Native 容器泄漏的问题。三层防御：`SystemTicker.Dispose` 中每个系统的 `OnDestroy` 独立 try-catch，`ECSManager.Dispose` 以 try-finally 保证 World 必定销毁，`World.Dispose` 以 try-finally 保证 BufferStore 和 Archetype/Chunk 的 Native 内存必定释放。
 - **README 章节编号**：多次重构后的编号偏移修复，所有子节编号与父章节对齐。
 - **Benchmark 编译**：`StructuralChangeBenchmarks` 中对已删除的 `QueryBuilder.GetEnumerator()` 的 `foreach` 调用修复为 `.AsRows()`。
+- **ECB 异常时静默丢弃**：修复系统 `OnTick` 抛异常时 ECB 命令被静默丢弃的问题。ECB（和 DeferredDestroy flush）现在始终在 `EndTick` 中执行，无论系统是否成功完成。
 
 ---
 
