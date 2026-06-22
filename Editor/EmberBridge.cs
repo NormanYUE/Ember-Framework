@@ -21,6 +21,7 @@ namespace Ember.Editor
         private const int PortStart = 9090;
         private const int PortEnd = 9099;
         private const string InstanceFile = "~/.ember/instance.json";
+        private const string PrefKeyAutoStart = "Ember.MCP.AutoStart";
 
         private static TcpListener s_Listener;
         private static Thread s_Thread;
@@ -31,11 +32,21 @@ namespace Ember.Editor
         private static readonly object s_WriteLock = new();
 
         internal static int ActivePort { get; private set; } = -1;
+        internal static bool IsRunning => s_Running;
         internal static bool IsConnected => s_Client?.Connected ?? false;
         internal static int RequestCount { get; private set; }
         internal static string LastRequest { get; private set; }
         internal static string LastResponse { get; private set; }
         internal static double LastRequestMs { get; private set; }
+
+        /// <summary>
+        /// Unity 启动时是否自动启动 Bridge。
+        /// </summary>
+        internal static bool AutoStart
+        {
+            get => EditorPrefs.GetBool(PrefKeyAutoStart, true);
+            set => EditorPrefs.SetBool(PrefKeyAutoStart, value);
+        }
 
         // Thread-safe queue: background thread → main thread
         private static readonly ConcurrentQueue<PendingRequest> s_Queue = new();
@@ -50,10 +61,11 @@ namespace Ember.Editor
 
         static EmberBridge()
         {
-            Start();
+            if (AutoStart)
+                Start();
         }
 
-        private static void Start()
+        public static void Start()
         {
             // Find available port
             ActivePort = -1;
@@ -187,7 +199,7 @@ namespace Ember.Editor
             s_Client = null;
         }
 
-        internal static void Stop()
+        public static void Stop()
         {
             s_Running = false;
             EditorApplication.update -= ProcessQueue;

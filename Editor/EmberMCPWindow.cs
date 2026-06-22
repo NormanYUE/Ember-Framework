@@ -99,15 +99,45 @@ namespace Ember.Editor
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
 
+            bool running = EmberBridge.IsRunning;
             bool connected = EmberBridge.IsConnected;
-            GUI.color = connected ? Color.green : (EmberBridge.ActivePort > 0 ? Color.yellow : Color.red);
-            EditorGUILayout.LabelField(connected ? "● Connected" : (EmberBridge.ActivePort > 0 ? "◉ Waiting" : "○ Stopped"),
-                EditorStyles.boldLabel);
+
+            // Status indicator
+            GUI.color = connected ? Color.green : (running ? Color.yellow : Color.gray);
+            EditorGUILayout.LabelField(connected ? "● Connected" : (running ? "◉ Waiting" : "○ Stopped"),
+                EditorStyles.boldLabel, GUILayout.Width(120));
             GUI.color = Color.white;
 
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.LabelField($"Port: {EmberBridge.ActivePort}", GUILayout.Width(80));
+            // Port info
+            if (running)
+                EditorGUILayout.LabelField($"Port: {EmberBridge.ActivePort}", GUILayout.Width(80));
             EditorGUILayout.LabelField(Application.productName, EditorStyles.miniLabel);
+
+            GUILayout.FlexibleSpace();
+
+            // Start / Stop button
+            if (running)
+            {
+                var origColor = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.8f, 0.3f, 0.3f);
+                if (GUILayout.Button("Stop Server", GUILayout.Width(90)))
+                {
+                    EmberBridge.Stop();
+                    m_Log.Clear();
+                }
+                GUI.backgroundColor = origColor;
+            }
+            else
+            {
+                var origColor = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.3f, 0.7f, 0.3f);
+                if (GUILayout.Button("Start Server", GUILayout.Width(90)))
+                {
+                    EmberBridge.Start();
+                }
+                GUI.backgroundColor = origColor;
+            }
+
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
         }
@@ -346,13 +376,24 @@ namespace Ember.Editor
         private void DrawSettings()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // Auto Start
+            EditorGUI.BeginChangeCheck();
+            bool autoStart = EditorGUILayout.ToggleLeft("Auto Start on Launch", EmberBridge.AutoStart);
+            if (EditorGUI.EndChangeCheck())
+                EmberBridge.AutoStart = autoStart;
+
+            // Port Range
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Port Range", GUILayout.Width(80));
             EditorGUILayout.LabelField("9090", GUILayout.Width(40));
             EditorGUILayout.LabelField("—", GUILayout.Width(15));
             EditorGUILayout.LabelField("9099", GUILayout.Width(40));
             EditorGUILayout.EndHorizontal();
-            EditorGUILayout.LabelField($"Active Port: {EmberBridge.ActivePort}", EditorStyles.miniLabel);
+
+            if (EmberBridge.IsRunning)
+                EditorGUILayout.LabelField($"Active Port: {EmberBridge.ActivePort}", EditorStyles.miniLabel);
+
             EditorGUILayout.EndVertical();
         }
 
