@@ -278,18 +278,24 @@ namespace Ember.Editor
                                 else if (existing[i] == '}') depth--;
                                 i++;
                             }
-                            // Insert before closing } of mcpServers
                             int insertPos = i - 1;
+                            bool isEmpty = insertPos == braceOpen + 1 ||
+                                           existing.Substring(braceOpen + 1, insertPos - braceOpen - 1).Trim().Length == 0;
+                            string prefix2 = isEmpty ? "" : ",";
                             string merged = existing.Insert(insertPos,
-                                $",\n{emberBlock}\n  ");
+                                $"{prefix2}\n{emberBlock}\n  ");
                             File.WriteAllText(configPath, merged);
                         }
                         else
                         {
                             // Add mcpServers block before final }
                             int lastBrace = existing.LastIndexOf('}');
+                            int firstBrace = existing.IndexOf('{');
+                            bool isEmpty = firstBrace >= 0 && lastBrace > firstBrace &&
+                                           existing.Substring(firstBrace + 1, lastBrace - firstBrace - 1).Trim().Length == 0;
+                            string prefix = isEmpty ? "" : ",";
                             string merged = existing.Insert(lastBrace,
-                                $",\n  \"mcpServers\": {{\n{emberBlock}\n  }}");
+                                $"{prefix}\n  \"mcpServers\": {{\n{emberBlock}\n  }}");
                             File.WriteAllText(configPath, merged);
                         }
                     }
