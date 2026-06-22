@@ -241,9 +241,7 @@ public class DamageSystem : SystemBase
 {
     protected override void OnTick(SystemContext ctx)
     {
-        var query = new EntityQuery(
-            all: new ComponentMask().With<Health>(),
-            none: new ComponentMask().With<DeadTag>());
+        var query = EntityQuery.With<Health>().None<DeadTag>();
 
         foreach (var chunk in ctx.QueryChunks(query))
         {
@@ -284,7 +282,7 @@ public class PhysicsSystem : SystemBase
 
 ### 4.4 直接 World 访问
 
-通过 `SystemContext` 可访问 `World` 和 `DeltaTime`，处理全局逻辑、事件或自定义遍历：
+通过 `SystemContext` 可直接访问组件，无需经过 `ctx.World`：
 
 ```csharp
 public class InputSystem : SystemBase
@@ -293,10 +291,12 @@ public class InputSystem : SystemBase
     {
         var world = ctx.World;
         var dt = ctx.DeltaTime;
-        // 自定义逻辑
+        // ctx.Get<T>(entity) / ctx.Set<T>(entity, value) 等同 ctx.World.GetComponent / SetComponent
     }
 }
 ```
+
+`ctx.Get<T>(entity)`、`ctx.Set<T>(entity, value)`、`ctx.Has<T>(entity)` 是 `ctx.World.GetComponent` 等的零开销快捷方法。
 
 ### 4.5 ComponentPack
 
@@ -402,6 +402,20 @@ public class SpawnMinionSystem : SystemBase
 ## 5. 查询（Query）
 
 系统内查询通过 `SystemContext.QueryChunks()` 或 `EcsAPI.Query()` 两种方式：
+
+**构造 EntityQuery**——推荐使用静态工厂 `EntityQuery.With<T>()`：
+
+```csharp
+// 推荐（链式 builder，0GC）：
+var query = EntityQuery.With<Health, Position>().None<DeadTag>().Build();
+
+// 等价传统写法：
+var query = new EntityQuery(
+    all: new ComponentMask().With<Health>().With<Position>(),
+    none: new ComponentMask().With<DeadTag>());
+```
+
+`EntityQueryBuilder` 是 struct，按值传递无分配。
 
 ### 5.1 外部查询（QueryBuilder）
 
@@ -621,9 +635,7 @@ public class DeathSystem : SystemBase
 {
     protected override void OnTick(SystemContext ctx)
     {
-        var query = new EntityQuery(
-            all: new ComponentMask().With<Health>(),
-            none: new ComponentMask().With<DeadTag>());
+        var query = EntityQuery.With<Health>().None<DeadTag>();
 
         foreach (var chunk in ctx.QueryChunks(query))
         {
@@ -783,7 +795,9 @@ world.RemoveComponentBatch<MyComponent>(entities);
 
 ### 12.2 ComponentMask API
 
-`ComponentMask` 是可变 struct。`With<T>()` / `Without<T>()` 会修改当前变量并返回它，适合链式构造：
+`ComponentMask` 是可变 struct。`With<T>()` / `Without<T>()` **修改当前变量并返回它**——这是性能优化（避免 struct 拷贝），但意味着它们不纯函数：对已有变量调 `With<T>()` 会改变它。适合链式构造新 mask：
+
+> ⚠️ `With<T>()` / `Without<T>()` 就地修改。从已有 mask 派生新 mask 请用 `WithAdded<T>()` / `WithRemoved<T>()`（复制后修改）。
 
 ```csharp
 var queryMask = new ComponentMask()
