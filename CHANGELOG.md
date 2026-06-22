@@ -2,6 +2,25 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.2.1] — API 精简 / 性能优化 / 单元测试
+
+### Added
+- **EntityQuery 静态工厂**：`EntityQuery.With<Health, Position>().None<DeadTag>()` 链式构造，0GC struct builder。
+- **SystemContext 快捷方法**：`ctx.Get<T>(e)` / `ctx.Set<T>(e,v)` / `ctx.Has<T>(e)` 直接变组件，零开销 wrapper。
+- **6 个新 ProfilerMarker**：CreateEntity、DestroyEntity、ChunkColumn.Access、ECB.Playback、FlushDeferredCreates、QueryMatches。
+- **NUnit 单元测试项目**：`tests/Unit/`，205 tests，12 个纯 C# 类型全覆盖，`dotnet test` 一键运行。
+
+### Changed
+- **移除 ColumnAccessor&lt;T&gt;**：消除每个 column×chunk 的堆分配和冗余 Dictionary 查找，`SystemChunk.Get<T>()` 直通 `Chunk.GetColumn<T>()`（O(1) 数组索引）。
+- **ChunkColumn.At() + AggressiveInlining**：保证 JIT 内联指针运算。
+- **EMBER003 诊断从 Warning 升级为 Error**。
+- **README**：Buffer/BufferElement 区分为两章，EntityQuery 示例更新，ComponentMask With vs WithAdded 警告。
+
+### Fixed
+- **ECB 异常时静默丢弃**：系统 OnTick 抛异常后 ECB 始终回放。
+
+---
+
 ## [0.2.0] — 生命周期钩子 / DeferredDestroy / ComponentPack Generator / PairQuery
 
 ### Added
