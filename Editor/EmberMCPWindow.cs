@@ -298,16 +298,12 @@ namespace Ember.Editor
             try
             {
                 bool isToml = configPath.EndsWith(".toml");
-                string port = EmberBridge.ActivePort > 0
-                    ? EmberBridge.ActivePort.ToString()
-                    : "9090";
-
                 string dotnetPath = FindDotNet();
                 string emberBlock = isToml
-                    ? $"[mcp_servers.ember]\ncommand = \"{dotnetPath}\"\nargs = [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n"
+                    ? $"[mcp_servers.ember]\ncommand = \"{dotnetPath}\"\nargs = [\"exec\", \"{RelativeServerPath}\"]\n"
                     : $"    \"ember\": {{\n" +
                       $"      \"command\": \"{dotnetPath}\",\n" +
-                      $"      \"args\": [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n" +
+                      $"      \"args\": [\"exec\", \"{RelativeServerPath}\"]\n" +
                       "    }";
 
                 if (File.Exists(configPath))

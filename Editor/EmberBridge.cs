@@ -198,6 +198,7 @@ namespace Ember.Editor
             CloseClient();
             s_Listener?.Stop();
             s_Thread?.Join(1000);
+            DeleteInstanceFile();
             ActivePort = -1;
         }
 
@@ -217,6 +218,18 @@ namespace Ember.Editor
                     ("active", $"\"127.0.0.1:{ActivePort}\""),
                     ("instances", $"[{instJson}]"));
                 File.WriteAllText(path, json);
+            }
+            catch { /* non-critical */ }
+        }
+
+        private static void DeleteInstanceFile()
+        {
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ember");
+                var path = InstanceFile.Replace("~", dir);
+                if (File.Exists(path)) File.Delete(path);
             }
             catch { /* non-critical */ }
         }
