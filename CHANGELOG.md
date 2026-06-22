@@ -23,6 +23,7 @@ All notable changes to the Ember ECS Framework.
 - **IBufferStore → IDisposable**：`BufferStore<T>` 的内部接口简化，`IBufferStore` 移除，直接实现 `IDisposable`。
 
 ### Fixed
+- **Native 内存泄漏**：修复 `World.Dispose()` 在异常场景下跳过 `DisposeBufferStores()` 和 `DisposeEcsCore()` 导致 Native 容器泄漏的问题。三层防御：`SystemTicker.Dispose` 中每个系统的 `OnDestroy` 独立 try-catch，`ECSManager.Dispose` 以 try-finally 保证 World 必定销毁，`World.Dispose` 以 try-finally 保证 BufferStore 和 Archetype/Chunk 的 Native 内存必定释放。
 - **README 章节编号**：多次重构后的编号偏移修复，所有子节编号与父章节对齐。
 - **Benchmark 编译**：`StructuralChangeBenchmarks` 中对已删除的 `QueryBuilder.GetEnumerator()` 的 `foreach` 调用修复为 `.AsRows()`。
 
