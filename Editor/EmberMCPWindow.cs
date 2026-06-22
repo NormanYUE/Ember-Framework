@@ -212,6 +212,68 @@ namespace Ember.Editor
 
         // ── Config helpers ──
 
+        private static string FindDotNet()
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string[] candidates;
+
+            if (Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                candidates = new[]
+                {
+                    @"C:\Program Files\dotnet\dotnet.exe",
+                    @"C:\Program Files (x86)\dotnet\dotnet.exe",
+                };
+            }
+            else if (Application.platform == RuntimePlatform.OSXEditor)
+            {
+                candidates = new[]
+                {
+                    Path.Combine(home, ".dotnet", "dotnet"),
+                    "/usr/local/share/dotnet/dotnet",
+                    "/usr/local/bin/dotnet",
+                    "/opt/homebrew/bin/dotnet",
+                };
+            }
+            else
+            {
+                candidates = new[]
+                {
+                    "/usr/share/dotnet/dotnet",
+                    "/usr/local/bin/dotnet",
+                    Path.Combine(home, ".dotnet", "dotnet"),
+                };
+            }
+
+            foreach (var candidate in candidates)
+                if (File.Exists(candidate))
+                    return candidate;
+
+            // Last resort: 'which dotnet' via shell
+            try
+            {
+                var proc = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = Application.platform == RuntimePlatform.WindowsEditor ? "where" : "which",
+                        Arguments = "dotnet",
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                proc.Start();
+                var result = proc.StandardOutput.ReadToEnd().Trim().Split('\n')[0].Trim();
+                proc.WaitForExit(3000);
+                if (!string.IsNullOrEmpty(result) && File.Exists(result))
+                    return result;
+            }
+            catch { }
+
+            return "dotnet"; // fallback
+        }
+
         private static bool ConfigHasEmber(string configPath)
         {
             try
@@ -240,10 +302,11 @@ namespace Ember.Editor
                     ? EmberBridge.ActivePort.ToString()
                     : "9090";
 
+                string dotnetPath = FindDotNet();
                 string emberBlock = isToml
-                    ? $"[mcp_servers.ember]\ncommand = \"dotnet\"\nargs = [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n"
+                    ? $"[mcp_servers.ember]\ncommand = \"{dotnetPath}\"\nargs = [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n"
                     : $"    \"ember\": {{\n" +
-                      $"      \"command\": \"dotnet\",\n" +
+                      $"      \"command\": \"{dotnetPath}\",\n" +
                       $"      \"args\": [\"exec\", \"{RelativeServerPath}\", \"--port\", \"{port}\"]\n" +
                       "    }";
 
