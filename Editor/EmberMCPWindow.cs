@@ -165,11 +165,11 @@ namespace Ember.Editor
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            // Claude Code — project-level config
-            string ccProjectConfig = Path.Combine(s_ProjectRoot, ".claude", "settings.json");
+            // Claude Code — project-level .mcp.json
+            string ccProjectConfig = Path.Combine(s_ProjectRoot, ".mcp.json");
             DrawClientRow("Claude Code", ccProjectConfig);
 
-            // Codex — project-level config
+            // Codex — project-level .codex/config.toml
             string codexProjectConfig = Path.Combine(s_ProjectRoot, ".codex", "config.toml");
             DrawClientRow("Codex", codexProjectConfig);
 
