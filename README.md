@@ -7,8 +7,8 @@
 3. [实体操作](#3-实体操作)
 4. [系统（System）](#4-系统system)
 5. [查询（Query）](#5-查询query)
-6. [动态缓冲区（Buffer）](#6-动态缓冲区buffer)
-7. [缓冲区元素（IBufferElement）](#7-缓冲区元素ibufferelement)
+6. [Buffer 句柄（BufferHandle）](#6-buffer-句柄bufferhandle)
+7. [实体动态数组（IBufferElement）](#7-实体动态数组ibufferelement)
 8. [单例实体（Singleton）](#8-单例实体singleton)
 9. [延迟命令缓冲区（ECB）](#9-延迟命令缓冲区ecb)
 10. [延迟销毁](#10-延迟销毁)
@@ -460,9 +460,11 @@ foreach (var row in EcsAPI.Query(world)
 
 ---
 
-## 6. 动态缓冲区（Buffer）
+## 6. Buffer 句柄（BufferHandle）
 
-Buffer 是变长数组，用于存储不确定数量的数据（如技能列表、伤害队列）。
+通过 `BufferHandle` 引用、全局池化管理的动态数组。适合共享数据池（如帧数据缓存、事件队列）。**不绑定实体**，由 `BufferStore<T>` (NativeList) 底层存储，通过句柄访问。
+
+> 如果需要**每个实体独立**的动态数组，见 §7 IBufferElement。
 
 ### 6.1 创建与销毁
 
@@ -519,9 +521,11 @@ unsafe
 
 ---
 
-## 7. 缓冲区元素（IBufferElement）
+## 7. 实体动态数组（IBufferElement）
 
-`IBufferElement` 允许实体携带多个同类型的组件元素，类似动态数组。适用于技能列表、伤害队列、Buff 叠加等需要可变数量同类型数据的场景。
+`IBufferElement` 允许**每个实体独立携带**多个同类型元素，类似 per-entity 动态数组。适用于技能列表、伤害队列、Buff 叠加等场景。底层使用托管 `List<T>`，通过 Entity 直接访问。
+
+> 注意：`World.AddBufferElement(BufferHandle, ...)` 和 `World.AddBufferElement(Entity, ...)` 是**两个不同的方法**——前者操作 §6 的句柄式 Buffer，后者操作本条目的实体数组。签名不同，不会混淆。
 
 ### 定义缓冲区元素
 
@@ -852,7 +856,7 @@ ECSManager (系统管理)
       │         └── NativeArray<byte>   连续内存，按组件类型分区（Tag 无数据列）
       ├── QueryCache             查询缓存（按 EntityQueryKey 字典查找，Archetype 版本号失效）
       ├── BufferStore<T>         动态缓冲区池
-      ├── BufferElement          实体级缓冲区元素（IBufferElement）
+      ├── BufferElement          实体级实体动态数组（IBufferElement）
       └── Singleton              单例实体映射
 
 SystemTicker (系统调度)
