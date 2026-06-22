@@ -2,7 +2,7 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.1.2] — 迭代内创建实体 / API 清理
+## [0.2.0] — 生命周期钩子 / DeferredDestroy / ComponentPack Generator / PairQuery
 
 ### Added
 - **迭代中创建实体**：`SystemContext.CreateEntity()` 允许在 query 遍历中创建实体并立即获取真实 `Entity` 引用，chunk placement 自动延迟到 `foreach` 结束时执行。解决了 ECB 临时 ID 无法存入组件数据的限制。
