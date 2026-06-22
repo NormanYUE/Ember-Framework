@@ -2,6 +2,27 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.3.0] — Editor 可视化调试工具
+
+### Added
+- **Systems 窗口** (`Window > Ember > Systems`)：Ticker 下拉切换，系统执行顺序列表，生命周期钩子标识（EC/ED/CA/CR），SystemGroup 高亮显示。
+- **Entities 窗口** (`Window > Ember > Entities`)：组件名过滤 + 分页（200条/页），实体列表含 Archetype/Components/Placed 列，选中实体下方展开组件值面板。
+- **Archetypes 窗口** (`Window > Ember > Archetypes`)：全局填充率条，原型分布列表，Chunk Fill Histogram 直方图，选中原型展开各 Chunk 详情。
+- **Component Types 窗口** (`Window > Ember > Component Types`)：组件注册表全览，TypeId/Kind/Size/Alignment 列，搜索过滤，选中显示完整类型信息。
+- **Component Inspector**：反射读取 Chunk 原始字节渲染组件 struct 字段，支持 IDataComponent/ITagComponent/IBufferElement 区分显示。
+- **DebugView 系统**：`WorldDebugView`、`EntityDebugView`、`ArchetypeDebugView`、`ChunkDebugView`、`SystemTickerDebugView`、`SystemInfoDebugView` — 只读快照 struct，仅在 Editor 窗口打开时构造，关闭 = 零开销。
+- **ECSManager.Active**：静态引用，Editor 窗口通过此属性获取运行时的 Manager 实例。
+- **ECSManager.GetDebugViews()** / **World.Debug** / **World.GetComponentBoxed()** / **World.GetEntityComponentTypes()**：Debug API 层。
+
+### Changed
+- **ECSManager**：新增 `Active` 静态属性和 `GetDebugViews()` 公共方法。
+- **SystemTicker**：新增 `GetDebugView(int)` 内部方法。
+- **World.Listeners**：`IsOverridden` 从 private 改为 internal static，供 SystemTicker 复用。
+- **csproj**：新增 `InternalsVisibleTo("Ember.Editor")`，排除 `Editor/**` 编译。
+- **包结构**：新增 `Editor/Ember.Editor.dll` (~20KB) + `Editor/Ember.Editor.asmdef` + `.meta` 文件。
+
+---
+
 ## [0.2.1] — API 精简 / 性能优化 / 单元测试
 
 ### Added
