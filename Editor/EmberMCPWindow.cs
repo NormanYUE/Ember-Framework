@@ -6,15 +6,11 @@ using UnityEngine;
 
 namespace Ember.Editor
 {
-    /// <summary>
-    /// Ember MCP 窗口 — 状态监控 + 请求日志 + 客户端一键安装。
-    /// </summary>
     public class EmberMCPWindow : EditorWindow
     {
         private static readonly string s_ProjectRoot = Path.GetFullPath(
             Path.Combine(Application.dataPath, ".."));
 
-        /// <summary>DLL 相对于项目根目录的路径（跨项目通用）。</summary>
         private static readonly Lazy<string> s_RelativeServerPath = new(() =>
         {
             string pkgPath = Path.Combine(s_ProjectRoot, "Packages", "com.ember.ecs");
@@ -22,15 +18,9 @@ namespace Ember.Editor
             {
                 var cacheDir = Path.Combine(s_ProjectRoot, "Library", "PackageCache");
                 if (Directory.Exists(cacheDir))
-                {
                     foreach (var d in Directory.GetDirectories(cacheDir, "com.ember.ecs@*"))
-                    {
-                        pkgPath = d;
-                        break;
-                    }
-                }
+                    { pkgPath = d; break; }
             }
-
             return Path.Combine(
                 Path.GetRelativePath(s_ProjectRoot, pkgPath),
                 "Tools~", "Ember.Mcp.Server.dll");
@@ -44,8 +34,8 @@ namespace Ember.Editor
         private bool m_ServerExpanded = true;
         private bool m_ClientExpanded = true;
         private bool m_SettingsExpanded;
-
-        private double m_LastRefreshTime;
+        private int m_LastLogCount;
+        private DateTime m_BridgeStartTime;
 
         [MenuItem("Window/Ember/MCP")]
         public static void Open()
@@ -58,6 +48,7 @@ namespace Ember.Editor
         private void OnEnable()
         {
             EditorApplication.update += OnEditorUpdate;
+            m_BridgeStartTime = DateTime.Now;
         }
 
         private void OnDisable()
@@ -67,11 +58,24 @@ namespace Ember.Editor
 
         private void OnEditorUpdate()
         {
-            if (EditorApplication.timeSinceStartup - m_LastRefreshTime > 0.5)
+            // Poll log updates from bridge
+            if (EmberBridge.IsRunning && EmberBridge.LastRequest != null)
             {
-                m_LastRefreshTime = EditorApplication.timeSinceStartup;
-                Repaint();
+                if (m_Log.Count == 0 || m_LastLogCount != EmberBridge.RequestCount)
+                {
+                    m_LastLogCount = EmberBridge.RequestCount;
+                    if (m_Log.Count >= 100) m_Log.RemoveAt(0);
+                    m_Log.Add(new LogEntry
+                    {
+                        Method = EmberBridge.LastRequest,
+                        Response = EmberBridge.LastResponse ?? "",
+                        TimeMs = EmberBridge.LastRequestMs,
+                        Timestamp = DateTime.Now.ToString("HH:mm:ss")
+                    });
+                }
             }
+
+            Repaint();
         }
 
         private void OnGUI()
@@ -95,22 +99,6 @@ namespace Ember.Editor
             m_SettingsExpanded = EditorGUILayout.BeginFoldoutHeaderGroup(m_SettingsExpanded, "Settings");
             if (m_SettingsExpanded) DrawSettings();
             EditorGUILayout.EndFoldoutHeaderGroup();
-
-            if (EmberBridge.RequestCount > m_Log.Count ||
-                (m_Log.Count > 0 && m_Log[^1].Method != EmberBridge.LastRequest))
-            {
-                if (EmberBridge.LastRequest != null)
-                {
-                    if (m_Log.Count >= 100) m_Log.RemoveAt(0);
-                    m_Log.Add(new LogEntry
-                    {
-                        Method = EmberBridge.LastRequest,
-                        Response = EmberBridge.LastResponse ?? "",
-                        TimeMs = EmberBridge.LastRequestMs,
-                        Timestamp = DateTime.Now.ToString("HH:mm:ss")
-                    });
-                }
-            }
         }
 
         // ── Status Bar ──
@@ -118,19 +106,21 @@ namespace Ember.Editor
         private void DrawStatusBar()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // Row 1: status indicator + start/stop
             EditorGUILayout.BeginHorizontal();
 
             bool running = EmberBridge.IsRunning;
             bool connected = EmberBridge.IsConnected;
 
+            // Status dot with animation
             GUI.color = connected ? Color.green : (running ? Color.yellow : Color.gray);
             EditorGUILayout.LabelField(connected ? "● Connected" : (running ? "◉ Waiting" : "○ Stopped"),
                 EditorStyles.boldLabel, GUILayout.Width(120));
             GUI.color = Color.white;
 
             if (running)
-                EditorGUILayout.LabelField($"Port: {EmberBridge.ActivePort}", GUILayout.Width(80));
-            EditorGUILayout.LabelField(Application.productName, EditorStyles.miniLabel);
+                EditorGUILayout.LabelField($"Port {EmberBridge.ActivePort}", EditorStyles.miniLabel, GUILayout.Width(65));
 
             GUILayout.FlexibleSpace();
 
@@ -142,8 +132,8 @@ namespace Ember.Editor
                 {
                     EmberBridge.Stop();
                     m_Log.Clear();
+                    m_LastLogCount = 0;
                 }
-
                 GUI.backgroundColor = origColor;
             }
             else
@@ -151,11 +141,38 @@ namespace Ember.Editor
                 var origColor = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0.3f, 0.7f, 0.3f);
                 if (GUILayout.Button("Start Server", GUILayout.Width(90)))
+                {
                     EmberBridge.Start();
+                    m_BridgeStartTime = DateTime.Now;
+                }
                 GUI.backgroundColor = origColor;
             }
 
             EditorGUILayout.EndHorizontal();
+
+            // Row 2: real-time stats
+            EditorGUILayout.BeginHorizontal();
+
+            if (running)
+            {
+                var uptime = DateTime.Now - m_BridgeStartTime;
+                EditorGUILayout.LabelField(
+                    $"Uptime: {uptime.Hours:D2}:{uptime.Minutes:D2}:{uptime.Seconds:D2}",
+                    EditorStyles.miniLabel);
+
+                GUILayout.FlexibleSpace();
+
+                EditorGUILayout.LabelField(
+                    $"{EmberBridge.RequestCount} requests",
+                    EditorStyles.miniLabel, GUILayout.Width(100));
+            }
+            else
+            {
+                EditorGUILayout.LabelField("Server not running", EditorStyles.miniLabel);
+            }
+
+            EditorGUILayout.EndHorizontal();
+
             EditorGUILayout.EndVertical();
         }
 
@@ -165,11 +182,9 @@ namespace Ember.Editor
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            // Claude Code — project-level .mcp.json
             string ccProjectConfig = Path.Combine(s_ProjectRoot, ".mcp.json");
             DrawClientRow("Claude Code", ccProjectConfig);
 
-            // Codex — project-level .codex/config.toml
             string codexProjectConfig = Path.Combine(s_ProjectRoot, ".codex", "config.toml");
             DrawClientRow("Codex", codexProjectConfig);
 
@@ -249,7 +264,6 @@ namespace Ember.Editor
                 if (File.Exists(candidate))
                     return candidate;
 
-            // Last resort: 'which dotnet' via shell
             try
             {
                 var proc = new System.Diagnostics.Process
@@ -271,7 +285,7 @@ namespace Ember.Editor
             }
             catch { }
 
-            return "dotnet"; // fallback
+            return "dotnet";
         }
 
         private static bool ConfigHasEmber(string configPath)
@@ -284,10 +298,8 @@ namespace Ember.Editor
                     var servers = SimpleJson.GetObject(content, "mcpServers");
                     return servers != null && SimpleJson.HasKey(servers, "ember");
                 }
-
                 if (configPath.EndsWith(".toml"))
                     return content.Contains("[mcp_servers.ember]") || content.Contains("\"ember\"");
-
                 return false;
             }
             catch { return false; }
@@ -323,11 +335,9 @@ namespace Ember.Editor
                     }
                     else
                     {
-                        // Check if mcpServers already exists
                         int serversIdx = existing.IndexOf("\"mcpServers\"");
                         if (serversIdx >= 0)
                         {
-                            // Insert ember inside existing mcpServers block
                             int braceOpen = existing.IndexOf('{', serversIdx);
                             int depth = 1;
                             int i = braceOpen + 1;
@@ -347,7 +357,6 @@ namespace Ember.Editor
                         }
                         else
                         {
-                            // Add mcpServers block before final }
                             int lastBrace = existing.LastIndexOf('}');
                             int firstBrace = existing.IndexOf('{');
                             bool isEmpty = firstBrace >= 0 && lastBrace > firstBrace &&
@@ -363,11 +372,9 @@ namespace Ember.Editor
                 {
                     string dir = Path.GetDirectoryName(configPath);
                     if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-
                     string newConfig = isToml
                         ? emberBlock
                         : $"{{\n  \"mcpServers\": {{\n{emberBlock}\n  }}\n}}\n";
-
                     File.WriteAllText(configPath, newConfig);
                 }
 
@@ -399,8 +406,6 @@ namespace Ember.Editor
                 }
                 else
                 {
-                    // Remove ", \"mcpServers\": { ... }" including the "ember" key
-                    // Simple approach: find "ember" key and remove its enclosing mcpServers block
                     int serversIdx = content.IndexOf("\"mcpServers\"");
                     if (serversIdx < 0) return;
                     int braceStart = content.IndexOf('{', serversIdx);
@@ -413,8 +418,6 @@ namespace Ember.Editor
                         else if (content[i] == '}') depth--;
                         if (depth == 0) { braceEnd = i + 1; break; }
                     }
-
-                    // Remove comma before mcpServers if present
                     int comma = content.LastIndexOf(',', serversIdx);
                     if (comma >= 0 && comma > serversIdx - 10)
                         content = content.Remove(comma, braceEnd - comma);
@@ -436,19 +439,40 @@ namespace Ember.Editor
         private void DrawServerInfo()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
             EditorGUILayout.LabelField("MCP Server", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Protocol", "JSON-lines over TCP");
-            EditorGUILayout.LabelField("Relative Path", RelativeServerPath);
 
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Mode", "Read + Write");
+            EditorGUILayout.LabelField("Protocol", EditorStyles.miniLabel, GUILayout.Width(60));
+            EditorGUILayout.LabelField("JSON-lines over TCP");
+            EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("DLL Path", EditorStyles.miniLabel, GUILayout.Width(60));
+            EditorGUILayout.LabelField(RelativeServerPath, EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Mode", EditorStyles.miniLabel, GUILayout.Width(60));
             GUI.color = EditorApplication.isPlaying ? Color.green : Color.yellow;
             EditorGUILayout.LabelField(
-                EditorApplication.isPlaying ? "(Play Mode — write enabled)" : "(Edit Mode — read only)",
+                EditorApplication.isPlaying ? "Read + Write (Play Mode)" : "Read Only (Edit Mode)",
                 EditorStyles.miniLabel);
             GUI.color = Color.white;
             EditorGUILayout.EndHorizontal();
+
+            // Live connection stats
+            if (EmberBridge.IsRunning)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Client", EditorStyles.miniLabel, GUILayout.Width(60));
+                GUI.color = EmberBridge.IsConnected ? Color.green : Color.yellow;
+                EditorGUILayout.LabelField(
+                    EmberBridge.IsConnected ? "MCP client connected" : "Waiting for MCP client...",
+                    EditorStyles.miniLabel);
+                GUI.color = Color.white;
+                EditorGUILayout.EndHorizontal();
+            }
 
             EditorGUILayout.EndVertical();
         }
@@ -458,37 +482,63 @@ namespace Ember.Editor
         private void DrawRequestLog()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            m_LogScroll = EditorGUILayout.BeginScrollView(m_LogScroll, GUILayout.Height(200));
 
-            for (int i = m_Log.Count - 1; i >= 0; i--)
-            {
-                var entry = m_Log[i];
-                EditorGUILayout.BeginHorizontal();
+            // Toolbar with clear button and last request time
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            if (GUILayout.Button("Clear", EditorStyles.toolbarButton, GUILayout.Width(50)))
+                m_Log.Clear();
+            GUILayout.FlexibleSpace();
+            if (m_Log.Count > 0)
+                EditorGUILayout.LabelField(
+                    $"Last: {m_Log[^1].Timestamp}",
+                    EditorStyles.toolbarButton);
+            EditorGUILayout.EndHorizontal();
 
-                Color bg = entry.TimeMs > 100 ? new Color(0.5f, 0.2f, 0.2f) :
-                    (entry.TimeMs > 10 ? new Color(0.4f, 0.4f, 0.1f) : Color.clear);
-                var origBg = GUI.backgroundColor;
-                if (bg != Color.clear) GUI.backgroundColor = bg;
-
-                EditorGUILayout.LabelField(entry.Timestamp, GUILayout.Width(70));
-                EditorGUILayout.LabelField(entry.Method, EditorStyles.boldLabel, GUILayout.Width(200));
-                EditorGUILayout.LabelField($"{entry.TimeMs:F1}ms", GUILayout.Width(50));
-                EditorGUILayout.LabelField(entry.Response, EditorStyles.wordWrappedMiniLabel);
-
-                GUI.backgroundColor = origBg;
-                EditorGUILayout.EndHorizontal();
-            }
+            m_LogScroll = EditorGUILayout.BeginScrollView(
+                m_LogScroll, GUILayout.Height(Mathf.Max(150, position.height - 500)));
 
             if (m_Log.Count == 0)
-                EditorGUILayout.LabelField("No requests yet.", EditorStyles.centeredGreyMiniLabel);
+            {
+                EditorGUILayout.LabelField("Waiting for requests...",
+                    EditorStyles.centeredGreyMiniLabel, GUILayout.Height(40));
+            }
+            else
+            {
+                for (int i = m_Log.Count - 1; i >= 0; i--)
+                {
+                    var entry = m_Log[i];
+                    EditorGUILayout.BeginHorizontal();
+
+                    // Color-code by latency
+                    Color bg = entry.TimeMs > 100 ? new Color(0.5f, 0.2f, 0.2f) :
+                        (entry.TimeMs > 10 ? new Color(0.4f, 0.4f, 0.1f) : Color.clear);
+                    var origBg = GUI.backgroundColor;
+                    if (bg != Color.clear) GUI.backgroundColor = bg;
+
+                    // Timestamp
+                    EditorGUILayout.LabelField(entry.Timestamp, EditorStyles.miniLabel, GUILayout.Width(70));
+
+                    // Method name
+                    EditorGUILayout.LabelField(entry.Method, EditorStyles.boldLabel, GUILayout.Width(210));
+
+                    // Latency
+                    GUI.color = entry.TimeMs > 100 ? Color.red : (entry.TimeMs > 10 ? Color.yellow : Color.green);
+                    EditorGUILayout.LabelField($"{entry.TimeMs:F1}ms", EditorStyles.miniLabel, GUILayout.Width(55));
+                    GUI.color = Color.white;
+
+                    // Response preview
+                    EditorGUILayout.LabelField(entry.Response, EditorStyles.wordWrappedMiniLabel);
+
+                    GUI.backgroundColor = origBg;
+                    EditorGUILayout.EndHorizontal();
+                }
+            }
 
             EditorGUILayout.EndScrollView();
 
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Clear", GUILayout.Width(60)))
-                m_Log.Clear();
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
+            // Auto-scroll to bottom on new entries
+            if (m_Log.Count > 0 && Event.current.type == EventType.Repaint)
+                m_LogScroll.y = float.MaxValue;
 
             EditorGUILayout.EndVertical();
         }
