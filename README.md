@@ -15,6 +15,7 @@
 11. [系统组合（SystemGroup）](#11-系统组合systemgroup)
 12. [性能与诊断](#12-性能与诊断)
 13. [架构概览](#13-架构概览)
+14. [MCP Server](#14-mcp-server)
 
 ---
 
@@ -935,3 +936,170 @@ Archetype.Layout (O(1) 查找) → Chunk[] → ChunkColumn<T>
   ↓ 遍历
 SystemBase / SystemContext
 ```
+
+---
+
+## 14. MCP Server
+
+MCP Server 让 AI 编码助手（Claude Code、Codex 等）通过标准 [Model Context Protocol](https://modelcontextprotocol.io) 直接操作运行中的 ECS World——查询实体、检查 Archetype、修改组件，全部由 AI 自动完成，无需手动编写调试脚本。
+
+### 14.1 架构概览
+
+```
+AI Client            MCP Server           Unity Editor
+(Claude Code/Codex)  (.NET console app)   (EmberBridge TCP)
+    │                     │                     │
+    │── JSON-RPC stdio ──▶│                     │
+    │                     │── TCP (127.0.0.1) ─▶│
+    │                     │                     │── ECSManager.Active
+    │                     │◀── JSON response ───│
+    │◀── JSON-RPC stdio ──│                     │
+```
+
+- **EmberBridge**：Unity Editor 内的 TCP 服务器，在 9090-9099 范围内自动扫描可用端口，将请求分派到主线程执行，结果通过 TCP 返回
+- **MCP Server**（`Ember.Mcp.Server.dll`）：独立的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。启动时从 `~/.ember/instance.json` 读取端口号，通过 stdio 与 AI 客户端通信
+- **安全模型**：默认只读——AI 可以查询 World 但不能修改。需要写操作时，必须显式添加 `--allow-write` 参数启动 MCP Server
+
+### 14.2 安装与配置
+
+#### 14.2.1 Unity 侧（EmberBridge）
+
+打开 Ember MCP 窗口：**`Window > Ember > MCP`**
+
+窗口顶部状态栏显示当前状态：
+
+- `● Connected`（绿色）— MCP Server 已连接，可以处理请求
+- `◉ Waiting`（黄色）— Bridge 已启动，等待客户端连接
+- `○ Stopped`（灰色）— Bridge 未运行
+
+点击 **`Start`** 启动 TCP 监听，点击 **`Stop`** 关闭。如果你希望每次打开 Unity 项目时自动启动，在 **`Settings`** 折叠区勾选 `AutoStart`。
+
+> Bridge 仅在 Unity Editor 中运行。读操作无需 Play Mode，但写操作（创建/销毁实体、增删组件）必须在 Play Mode 下执行。
+
+#### 14.2.2 AI 客户端配置
+
+在 **`Client Setup`** 折叠区，可以一键安装/卸载 AI 客户端的 MCP 配置：
+
+- **Claude Code** → `.mcp.json`（项目根目录）
+- **Codex** → `.codex/config.toml`
+
+点击 `Install` 后，窗口会自动生成指向 `Tools~/Ember.Mcp.Server.dll` 的配置。包更新后（Tools~ 路径中的 git hash 变化），窗口打开时也会自动修复过期的配置路径。
+
+也可以手动编辑配置文件。以 Claude Code 为例：
+
+```json
+{
+  "mcpServers": {
+    "ember": {
+      "command": "dotnet",
+      "args": ["exec", "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll", "--allow-write"]
+    }
+  }
+}
+```
+
+**启动参数：**
+
+| 参数 | 说明 |
+|------|------|
+| `--allow-write` | 启用写工具（默认只读） |
+| `--port <n>` | 手动指定端口（通常不需要，MCP Server 会从 `instance.json` 自动读取） |
+
+### 14.3 工具参考
+
+MCP Server 向 AI 客户端暴露 11 个工具，分读/写两类。
+
+#### 只读工具
+
+| 工具 | 说明 |
+|------|------|
+| `ember_world_info` | World 统计：实体容量、存活数、Archetype 数、Chunk 数、全局填充率 |
+| `ember_query_entities` | 按组件名 AND 过滤实体，支持 `offset` / `limit` 分页 |
+| `ember_get_entity` | 获取单个实体的全部组件数据（字段级 JSON） |
+| `ember_get_archetypes` | 列出所有 Archetype：组件名列表、Chunk 数、实体数、填充率 |
+| `ember_get_systems` | 列出所有 Ticker 及其注册的系统；可指定 `tickerIndex` 过滤 |
+| `ember_get_component_types` | 列出所有已注册组件类型：ID、名称、分类、大小、对齐 |
+
+#### 写入工具（需 `--allow-write`）
+
+| 工具 | 说明 |
+|------|------|
+| `ember_create_entity` | 创建指定组件的实体，返回实体 index |
+| `ember_destroy_entity` | 按 index 销毁实体 |
+| `ember_add_component` | 为实体添加组件，可传入 `initialValues` 设置初始字段值 |
+| `ember_remove_component` | 从实体移除组件 |
+| `ember_set_component` | 设置实体上某个组件的字段值 |
+
+#### 典型工具展开
+
+**`ember_query_entities`**
+
+```
+参数:
+  components: string[]  — 组件类型名，AND 逻辑筛选
+  offset: number        — 分页偏移（默认 0）
+  limit: number         — 最大返回数（默认 100，上限 500）
+
+返回:
+  entities: [...]       — 实体数组，每个元素包含 index, version, components 及各组件字段值
+  count: number         — 匹配总数
+  offset, limit         — 本次查询的分页参数
+```
+
+**`ember_get_entity`**
+
+```
+参数:
+  entityIndex: number   — 实体 index（必填）
+
+返回:
+  实体全部组件及字段值（字段级 JSON）。例如:
+  {"index":42,"version":1,"components":{"Health":{"Current":80,"Max":100},"Position":{"X":1.5,"Y":0,"Z":3.2}}}
+```
+
+**`ember_add_component`**
+
+```
+参数:
+  entityIndex: number   — 目标实体 index（必填）
+  componentType: string — 组件类型名（必填）
+  initialValues: object — 初始字段值的 JSON 对象（可选，不传则使用 default）
+
+示例: 为实体 42 添加 Health 组件并初始化
+  ember_add_component(42, "Health", {"Current": 100, "Max": 100})
+```
+
+### 14.4 使用示例
+
+以下是 AI 客户端中一次典型的交互流程：
+
+> **用户**: 查询所有有 Health 组件的实体，看看谁血量低  
+> **AI** 调用 `ember_query_entities(components=["Health"])`  
+> → 返回 3 个实体，实体 #1 的 Health.Current = 80，实体 #2 的 Health.Current = 5  
+>
+> **用户**: 实体 #2 快死了，看看它的详细信息  
+> **AI** 调用 `ember_get_entity(entityIndex=2)`  
+> → 返回 Entity #2 的全部组件：Health { Current: 5, Max: 100 }，Position { X: 10, Y: 2, Z: 0 }，DeadTag（标记）  
+>
+> **用户**: 给我在它旁边（X+3）创建一个新实体，带相同的组件  
+> **AI** 调用 `ember_create_entity(components=["Health","Position"])` → 拿到新 entityIndex=15  
+> **AI** 调用 `ember_set_component(15, "Health", {"Current":100,"Max":100})`  
+> **AI** 调用 `ember_set_component(15, "Position", {"X":13,"Y":2,"Z":0})`  
+> → 实体 #15 创建完成
+
+### 14.5 调试与故障排查
+
+#### 常见问题
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| "Not connected to Unity" | Bridge 未启动或 Unity 未运行 | `Window > Ember > MCP` → Start |
+| "Write operations are disabled" | 未启用 `--allow-write` | 在配置中添加 `--allow-write` 后重启客户端 |
+| "Write operations require Play Mode" | 写操作必须在 Play Mode 执行 | 进入 Play Mode |
+| 客户端启动后卡住 / 无响应 | 端口冲突 | Settings 中调整端口范围，或手动 `--port` |
+| 包更新后配置失效 | Tools~ 路径中的 hash 变化 | 窗口 `AutoUpdateConfigPaths()` 自动修复，重启 `Ember MCP` 窗口即可 |
+
+#### 日志诊断
+
+- **Unity Console**：过滤 `[Ember MCP]` 前缀，可查看 Bridge 启动状态、客户端连接/断开、请求方法名和截断的 JSON 内容
+- **Ember MCP 窗口 → Request Log**：实时显示最近 100 条请求的方法名、响应耗时（ms）和结果预览
