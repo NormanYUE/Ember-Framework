@@ -15,8 +15,11 @@ namespace Ember.Editor
         {
             var idx = FindKey(json, key);
             if (idx < 0) return null;
-            var start = json.IndexOf('"', idx);
-            if (start < 0) return null;
+            // Skip past the key to the colon, then find the value
+            int p = idx + key.Length + 2; // skip "key"
+            while (p < json.Length && (json[p] == ' ' || json[p] == ':' || json[p] == '\t' || json[p] == '\r' || json[p] == '\n')) p++;
+            if (p >= json.Length || json[p] != '"') return null;
+            var start = p;
             var end = json.IndexOf('"', start + 1);
             if (end < 0) return null;
             return json.Substring(start + 1, end - start - 1);

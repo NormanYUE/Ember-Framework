@@ -100,8 +100,8 @@ namespace Ember.Editor
                 {
                     s_Client = s_Listener.AcceptTcpClient();
                     var stream = s_Client.GetStream();
-                    s_Reader = new StreamReader(stream, Encoding.UTF8);
-                    s_Writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true, NewLine = "\n" };
+                    s_Reader = new StreamReader(stream, new UTF8Encoding(false));
+                    s_Writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
 
                     Debug.Log("[Ember MCP] Client connected");
                     while (s_Running)
