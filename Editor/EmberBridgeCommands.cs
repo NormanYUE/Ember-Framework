@@ -223,6 +223,8 @@ namespace Ember.Editor
         {
             int tickerIndex = SimpleJson.GetInt(args, "tickerIndex", -1);
             var views = manager.GetDebugViews();
+            if (views == null)
+                return SimpleJson.BuildJson(("tickers", "[]"));
 
             var tickers = new StringBuilder("[");
             for (int i = 0; i < views.Length; i++)
