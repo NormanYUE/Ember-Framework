@@ -103,10 +103,11 @@ namespace Ember.Editor
                     s_Reader = new StreamReader(stream, Encoding.UTF8);
                     s_Writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true, NewLine = "\n" };
 
-                    while (s_Running && s_Client.Connected)
+                    // NOTE: s_Client.Connected is unreliable on macOS — don't use it as loop condition
+                    while (s_Running)
                     {
                         var line = s_Reader.ReadLine();
-                        if (line == null) break;
+                        if (line == null || line.Length == 0) break;
 
                         var id = SimpleJson.GetString(line, "id");
                         var method = SimpleJson.GetString(line, "method");
@@ -165,7 +166,11 @@ namespace Ember.Editor
         {
             lock (s_WriteLock)
             {
-                if (s_Writer == null) return;
+                if (s_Writer == null)
+                {
+                    Debug.LogWarning($"[Ember MCP] Cannot send response — s_Writer is null (connection may have dropped)");
+                    return;
+                }
                 try
                 {
                     var resp = SimpleJson.BuildJson(
