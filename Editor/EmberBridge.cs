@@ -103,17 +103,20 @@ namespace Ember.Editor
                     s_Reader = new StreamReader(stream, Encoding.UTF8);
                     s_Writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true, NewLine = "\n" };
 
-                    // NOTE: s_Client.Connected is unreliable on macOS — don't use it as loop condition
+                    Debug.Log("[Ember MCP] Client connected");
                     while (s_Running)
                     {
                         var line = s_Reader.ReadLine();
                         if (line == null || line.Length == 0) break;
+
+                        Debug.Log($"[Ember MCP] ← received: {line.Substring(0, Math.Min(line.Length, 100))}");
 
                         var id = SimpleJson.GetString(line, "id");
                         var method = SimpleJson.GetString(line, "method");
                         var args = SimpleJson.GetObject(line, "params");
                         if (method == null) continue;
 
+                        Debug.Log($"[Ember MCP] Enqueuing: method={method} id={id}");
                         s_Queue.Enqueue(new PendingRequest
                         {
                             Id = id,
@@ -121,6 +124,7 @@ namespace Ember.Editor
                             Params = args
                         });
                     }
+                    Debug.Log("[Ember MCP] Client disconnected (ReadLine returned null/empty)");
                 }
                 catch (ThreadAbortException) { break; }
                 catch (IOException) { /* client disconnected */ }
@@ -136,6 +140,7 @@ namespace Ember.Editor
         {
             while (s_Queue.TryDequeue(out var pending))
             {
+                Debug.Log($"[Ember MCP] Processing: method={pending.Method} id={pending.Id}");
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 string result = null;
                 string error = null;
@@ -145,11 +150,13 @@ namespace Ember.Editor
                     result = EmberBridgeCommands.Execute(pending.Method, pending.Params);
                     LastRequest = pending.Method;
                     LastResponse = result?.Length > 200 ? result.Substring(0, 200) : result;
+                    Debug.Log($"[Ember MCP] Execute OK: {pending.Method}, result len={result?.Length ?? 0}");
                 }
                 catch (Exception ex)
                 {
                     error = ex.Message;
                     LastResponse = $"Error: {error}";
+                    Debug.LogWarning($"[Ember MCP] Execute error: {ex.GetType().Name}: {ex.Message}");
                 }
                 finally
                 {
@@ -158,7 +165,9 @@ namespace Ember.Editor
                     RequestCount++;
                 }
 
+                Debug.Log($"[Ember MCP] Sending response for {pending.Id}");
                 SendResponse(pending.Id, result, error);
+                Debug.Log($"[Ember MCP] Response sent for {pending.Id}");
             }
         }
 
