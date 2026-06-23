@@ -49,6 +49,7 @@ namespace Ember.Editor
         {
             EditorApplication.update += OnEditorUpdate;
             m_BridgeStartTime = DateTime.Now;
+            AutoUpdateConfigPaths();
         }
 
         private void OnDisable()
@@ -226,6 +227,35 @@ namespace Ember.Editor
         }
 
         // ── Config helpers ──
+
+        /// <summary>
+        /// 窗口打开时自动检测并更新过期的 MCP 配置路径（package 更新后 git hash 变化）。
+        /// </summary>
+        private void AutoUpdateConfigPaths()
+        {
+            string ccConfig = Path.Combine(s_ProjectRoot, ".mcp.json");
+            string codexConfig = Path.Combine(s_ProjectRoot, ".codex", "config.toml");
+
+            if (File.Exists(ccConfig) && ConfigHasEmber(ccConfig))
+            {
+                string content = File.ReadAllText(ccConfig);
+                if (!content.Contains(RelativeServerPath))
+                {
+                    Debug.Log($"[Ember MCP] Auto-updating .mcp.json path to {RelativeServerPath}");
+                    InstallEmberToConfig(ccConfig, "Claude Code");
+                }
+            }
+
+            if (File.Exists(codexConfig) && ConfigHasEmber(codexConfig))
+            {
+                string content = File.ReadAllText(codexConfig);
+                if (!content.Contains(RelativeServerPath))
+                {
+                    Debug.Log($"[Ember MCP] Auto-updating .codex/config.toml path to {RelativeServerPath}");
+                    InstallEmberToConfig(codexConfig, "Codex");
+                }
+            }
+        }
 
         private static string FindDotNet()
         {
