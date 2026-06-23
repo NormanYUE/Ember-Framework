@@ -1005,69 +1005,18 @@ AI Client            MCP Server           Unity Editor
 | `--allow-write` | 启用写工具（默认只读） |
 | `--port <n>` | 手动指定端口（通常不需要，MCP Server 会从 `instance.json` 自动读取） |
 
-### 14.3 工具参考
+### 14.3 Command Reference (26 commands via `ember_execute`)
 
-MCP Server 向 AI 客户端暴露 11 个工具，分读/写两类。
+The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
-#### 只读工具
+**Read (10):** world_info, query_entities, get_entity, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_buffer_elements, entity_counts
+**Write (6):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton
+**Batch (2):** add_component_batch, remove_component_batch
+**Buffer (4):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element
+**Manager (3):** mcp_status, get_ecs_status, advance_frame
+**Aux (1):** resolve_component
 
-| 工具 | 说明 |
-|------|------|
-| `ember_world_info` | World 统计：实体容量、存活数、Archetype 数、Chunk 数、全局填充率 |
-| `ember_query_entities` | 按组件名 AND 过滤实体，支持 `offset` / `limit` 分页 |
-| `ember_get_entity` | 获取单个实体的全部组件数据（字段级 JSON） |
-| `ember_get_archetypes` | 列出所有 Archetype：组件名列表、Chunk 数、实体数、填充率 |
-| `ember_get_systems` | 列出所有 Ticker 及其注册的系统；可指定 `tickerIndex` 过滤 |
-| `ember_get_component_types` | 列出所有已注册组件类型：ID、名称、分类、大小、对齐 |
-
-#### 写入工具（需 `--allow-write`）
-
-| 工具 | 说明 |
-|------|------|
-| `ember_create_entity` | 创建指定组件的实体，返回实体 index |
-| `ember_destroy_entity` | 按 index 销毁实体 |
-| `ember_add_component` | 为实体添加组件，可传入 `initialValues` 设置初始字段值 |
-| `ember_remove_component` | 从实体移除组件 |
-| `ember_set_component` | 设置实体上某个组件的字段值 |
-
-#### 典型工具展开
-
-**`ember_query_entities`**
-
-```
-参数:
-  components: string[]  — 组件类型名，AND 逻辑筛选
-  offset: number        — 分页偏移（默认 0）
-  limit: number         — 最大返回数（默认 100，上限 500）
-
-返回:
-  entities: [...]       — 实体数组，每个元素包含 index, version, components 及各组件字段值
-  count: number         — 匹配总数
-  offset, limit         — 本次查询的分页参数
-```
-
-**`ember_get_entity`**
-
-```
-参数:
-  entityIndex: number   — 实体 index（必填）
-
-返回:
-  实体全部组件及字段值（字段级 JSON）。例如:
-  {"index":42,"version":1,"components":{"Health":{"Current":80,"Max":100},"Position":{"X":1.5,"Y":0,"Z":3.2}}}
-```
-
-**`ember_add_component`**
-
-```
-参数:
-  entityIndex: number   — 目标实体 index（必填）
-  componentType: string — 组件类型名（必填）
-  initialValues: object — 初始字段值的 JSON 对象（可选，不传则使用 default）
-
-示例: 为实体 42 添加 Health 组件并初始化
-  ember_add_component(42, "Health", {"Current": 100, "Max": 100})
-```
+Example: `{"op": "query_entities", "components": ["Position"], "limit": 10}`
 
 ### 14.4 使用示例
 
