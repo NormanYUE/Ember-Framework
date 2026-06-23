@@ -127,10 +127,15 @@ namespace Ember.Editor
                     Debug.Log("[Ember MCP] Client disconnected (ReadLine returned null/empty)");
                 }
                 catch (ThreadAbortException) { break; }
-                catch (IOException) { /* client disconnected */ }
+                catch (IOException)
+                {
+                    Debug.Log("[Ember MCP] Client disconnected (IO)");
+                    break;
+                }
                 catch (Exception ex)
                 {
                     Debug.LogWarning($"[Ember MCP] Listener error: {ex.Message}");
+                    break;
                 }
                 finally { CloseClient(); }
             }

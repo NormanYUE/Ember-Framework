@@ -13,11 +13,12 @@ namespace Ember.Editor
         public static string Execute(string method, string argsJson)
         {
             var manager = ECSManager.Active;
-            if (manager?.World == null)
-                throw new InvalidOperationException("No active ECSManager. Set ECSManager.Active in your game code.");
 
             if (IsWriteMethod(method) && !UnityEditor.EditorApplication.isPlaying)
-                throw new InvalidOperationException("Write operations require Play Mode.");
+                return BuildError("Write operations require Play Mode.");
+
+            if (manager?.World == null)
+                return BuildError("No active ECSManager. Enter Play Mode or set ECSManager.Active.");
 
             return method switch
             {
@@ -404,6 +405,11 @@ namespace Ember.Editor
         }
 
         // ── Helpers ──
+
+        private static string BuildError(string msg)
+        {
+            return SimpleJson.BuildJson(("error", $"\"{Escape(msg)}\""));
+        }
 
         private static bool IsWriteMethod(string method) => method switch
         {
