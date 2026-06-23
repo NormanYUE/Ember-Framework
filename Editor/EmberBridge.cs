@@ -31,8 +31,28 @@ namespace Ember.Editor
         private static readonly object s_WriteLock = new();
 
         internal static int ActivePort { get; private set; } = -1;
+
+        internal static readonly string ProjectRoot = Path.GetFullPath(
+            Path.Combine(Application.dataPath, ".."));
         internal static bool IsRunning => s_Running;
         internal static bool IsConnected => s_Client?.Connected ?? false;
+
+        private static readonly Lazy<string> s_RelativeServerPath = new(() =>
+        {
+            var pkgPath = Path.Combine(ProjectRoot, "Packages", "com.ember.ecs");
+            if (!Directory.Exists(pkgPath))
+            {
+                var cacheDir = Path.Combine(ProjectRoot, "Library", "PackageCache");
+                if (Directory.Exists(cacheDir))
+                    foreach (var d in Directory.GetDirectories(cacheDir, "com.ember.ecs@*"))
+                    { pkgPath = d; break; }
+            }
+            return Path.Combine(
+                Path.GetRelativePath(ProjectRoot, pkgPath),
+                "Tools~", "Ember.Mcp.Server.dll");
+        });
+
+        internal static string RelativeServerPath => s_RelativeServerPath.Value;
         internal static int RequestCount { get; private set; }
         internal static string LastRequest { get; private set; }
         internal static string LastResponse { get; private set; }
@@ -89,6 +109,7 @@ namespace Ember.Editor
             s_Thread.Start();
             EditorApplication.update += ProcessQueue;
             WriteInstanceFile();
+            AutoUpdateConfigPaths(silent: true);
             Debug.Log($"[Ember MCP] Bridge started on port {ActivePort}");
         }
 
@@ -100,8 +121,8 @@ namespace Ember.Editor
                 {
                     s_Client = s_Listener.AcceptTcpClient();
                     var stream = s_Client.GetStream();
-                    s_Reader = new StreamReader(stream, new UTF8Encoding(false));
-                    s_Writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+                    s_Reader = new StreamReader(stream, Encoding.UTF8);
+                    s_Writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true, NewLine = "\n" };
 
                     Debug.Log("[Ember MCP] Client connected");
                     while (s_Running)
@@ -250,6 +271,319 @@ namespace Ember.Editor
                 if (File.Exists(path)) File.Delete(path);
             }
             catch { /* non-critical */ }
+        }
+
+        // ── Config Management ──
+
+        /// <summary>
+        /// 检查 AI 客户端配置文件中的 Server DLL 路径是否过期，过期则自动修复。
+        /// silent=true 时只记录日志不弹对话框（Bridge 自动启动场景）。
+        /// </summary>
+        internal static void AutoUpdateConfigPaths(bool silent = false)
+        {
+            string ccConfig = Path.Combine(ProjectRoot, ".mcp.json");
+            string codexConfig = Path.Combine(ProjectRoot, ".codex", "config.toml");
+
+            TryAutoFixConfig(ccConfig, "Claude Code", silent);
+            TryAutoFixConfig(codexConfig, "Codex", silent);
+        }
+
+        private static void TryAutoFixConfig(string configPath, string clientName, bool silent)
+        {
+            if (!File.Exists(configPath) || !ConfigHasEmber(configPath))
+                return;
+
+            string content = File.ReadAllText(configPath);
+            if (content.Contains(RelativeServerPath))
+                return; // 路径已最新，无需修复
+
+            string updated = PatchEmberDllPath(content, RelativeServerPath);
+            if (updated == content)
+                return; // 未能定位到旧路径，放弃静默修复
+
+            Debug.Log($"[Ember MCP] Auto-updating {Path.GetFileName(configPath)} path to {RelativeServerPath}");
+            try
+            {
+                File.Copy(configPath, configPath + ".bak", true);
+                File.WriteAllText(configPath, updated);
+                if (!silent)
+                    EditorUtility.DisplayDialog("Ember MCP",
+                        $"Updated {Path.GetFileName(configPath)} path.\n" +
+                        $"Restart {clientName} to apply.", "OK");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[Ember MCP] Auto-update failed for {configPath}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 在配置文本中精确替换 Ember.Mcp.Server.dll 的路径字符串。
+        /// 定位到 "Ember.Mcp.Server.dll" → 向两侧扩展到引号 → 替换引号内的路径。
+        /// </summary>
+        private static string PatchEmberDllPath(string content, string newPath)
+        {
+            const string dllName = "Ember.Mcp.Server.dll";
+            int dllIdx = content.IndexOf(dllName, StringComparison.Ordinal);
+            if (dllIdx < 0) return content;
+
+            // 向左侧找到路径的起始引号
+            int openQuote = content.LastIndexOf('"', dllIdx);
+            if (openQuote < 0) return content;
+
+            // 向右侧找到路径的结束引号
+            int closeQuote = content.IndexOf('"', dllIdx + dllName.Length);
+            if (closeQuote < 0) return content;
+
+            // 替换引号之间的完整旧路径
+            return content.Substring(0, openQuote + 1) + newPath + content.Substring(closeQuote);
+        }
+
+        private static string FindDotNet()
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string[] candidates;
+
+            if (Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                candidates = new[]
+                {
+                    @"C:\Program Files\dotnet\dotnet.exe",
+                    @"C:\Program Files (x86)\dotnet\dotnet.exe",
+                };
+            }
+            else if (Application.platform == RuntimePlatform.OSXEditor)
+            {
+                candidates = new[]
+                {
+                    Path.Combine(home, ".dotnet", "dotnet"),
+                    "/usr/local/share/dotnet/dotnet",
+                    "/usr/local/bin/dotnet",
+                    "/opt/homebrew/bin/dotnet",
+                };
+            }
+            else
+            {
+                candidates = new[]
+                {
+                    "/usr/share/dotnet/dotnet",
+                    "/usr/local/bin/dotnet",
+                    Path.Combine(home, ".dotnet", "dotnet"),
+                };
+            }
+
+            foreach (var candidate in candidates)
+                if (File.Exists(candidate))
+                    return candidate;
+
+            try
+            {
+                var proc = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = Application.platform == RuntimePlatform.WindowsEditor ? "where" : "which",
+                        Arguments = "dotnet",
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                proc.Start();
+                var result = proc.StandardOutput.ReadToEnd().Trim().Split('\n')[0].Trim();
+                proc.WaitForExit(3000);
+                if (!string.IsNullOrEmpty(result) && File.Exists(result))
+                    return result;
+            }
+            catch { }
+
+            return "dotnet";
+        }
+
+        internal static bool ConfigHasEmber(string configPath)
+        {
+            try
+            {
+                string content = File.ReadAllText(configPath);
+                if (configPath.EndsWith(".json"))
+                {
+                    var servers = SimpleJson.GetObject(content, "mcpServers");
+                    return servers != null && SimpleJson.HasKey(servers, "ember");
+                }
+                if (configPath.EndsWith(".toml"))
+                    return content.Contains("[mcp_servers.ember]") || content.Contains("\"ember\"");
+                return false;
+            }
+            catch { return false; }
+        }
+
+        internal static void InstallEmberToConfig(string configPath, string clientName, bool silent = false)
+        {
+            bool isToml = configPath.EndsWith(".toml");
+            string dotnetPath = FindDotNet();
+            string emberBlock = isToml
+                ? $"[mcp_servers.ember]\ncommand = \"{dotnetPath}\"\nargs = [\"exec\", \"{RelativeServerPath}\"]\n"
+                : $"    \"ember\": {{\n" +
+                  $"      \"command\": \"{dotnetPath}\",\n" +
+                  $"      \"args\": [\"exec\", \"{RelativeServerPath}\"]\n" +
+                  "    }";
+
+            if (File.Exists(configPath))
+            {
+                string existing = File.ReadAllText(configPath);
+                if (ConfigHasEmber(configPath))
+                {
+                    // 配置文件已有 ember 但路径过期 → 替换旧路径
+                    // 简单策略：删除旧 ember 条目后重新插入
+                    var removed = RemoveEmberFromConfigInternal(configPath, existing, isToml);
+                    File.Copy(configPath, configPath + ".bak", true);
+                    if (!removed.Contains("\"mcpServers\"") && !removed.Contains("[mcp_servers."))
+                    {
+                        // 删除后配置中没有 mcpServers 了，重新创建
+                        File.WriteAllText(configPath, isToml
+                            ? emberBlock
+                            : $"{{\n  \"mcpServers\": {{\n{emberBlock}\n  }}\n}}\n");
+                    }
+                    else if (isToml)
+                    {
+                        File.WriteAllText(configPath, removed.TrimEnd() + "\n" + emberBlock);
+                    }
+                    else
+                    {
+                        int serversIdx = removed.IndexOf("\"mcpServers\"");
+                        int braceOpen = removed.IndexOf('{', serversIdx);
+                        int depth = 1;
+                        int i = braceOpen + 1;
+                        while (i < removed.Length && depth > 0)
+                        {
+                            if (removed[i] == '{') depth++;
+                            else if (removed[i] == '}') depth--;
+                            i++;
+                        }
+                        int insertPos = i - 1;
+                        bool isEmpty = insertPos == braceOpen + 1 ||
+                                       removed.Substring(braceOpen + 1, insertPos - braceOpen - 1).Trim().Length == 0;
+                        string prefix = isEmpty ? "" : ",";
+                        string merged = removed.Insert(insertPos,
+                            $"{prefix}\n{emberBlock}\n  ");
+                        File.WriteAllText(configPath, merged);
+                    }
+                    if (!silent) EditorUtility.DisplayDialog("Ember MCP",
+                        $"Updated to {Path.GetFileName(configPath)}\n" +
+                        $"Path: {RelativeServerPath}\n" +
+                        $"Restart {clientName} for changes to take effect.", "OK");
+                    return;
+                }
+
+                File.Copy(configPath, configPath + ".bak", true);
+
+                if (isToml)
+                {
+                    File.AppendAllText(configPath, "\n" + emberBlock);
+                }
+                else
+                {
+                    int serversIdx = existing.IndexOf("\"mcpServers\"");
+                    if (serversIdx >= 0)
+                    {
+                        int braceOpen = existing.IndexOf('{', serversIdx);
+                        int depth = 1;
+                        int i = braceOpen + 1;
+                        while (i < existing.Length && depth > 0)
+                        {
+                            if (existing[i] == '{') depth++;
+                            else if (existing[i] == '}') depth--;
+                            i++;
+                        }
+                        int insertPos = i - 1;
+                        bool isEmpty = insertPos == braceOpen + 1 ||
+                                       existing.Substring(braceOpen + 1, insertPos - braceOpen - 1).Trim().Length == 0;
+                        string prefix = isEmpty ? "" : ",";
+                        string merged = existing.Insert(insertPos,
+                            $"{prefix}\n{emberBlock}\n  ");
+                        File.WriteAllText(configPath, merged);
+                    }
+                    else
+                    {
+                        int lastBrace = existing.LastIndexOf('}');
+                        int firstBrace = existing.IndexOf('{');
+                        bool isEmpty = firstBrace >= 0 && lastBrace > firstBrace &&
+                                       existing.Substring(firstBrace + 1, lastBrace - firstBrace - 1).Trim().Length == 0;
+                        string prefix = isEmpty ? "" : ",";
+                        string merged = existing.Insert(lastBrace,
+                            $"{prefix}\n  \"mcpServers\": {{\n{emberBlock}\n  }}");
+                        File.WriteAllText(configPath, merged);
+                    }
+                }
+            }
+            else
+            {
+                string dir = Path.GetDirectoryName(configPath);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                string newConfig = isToml
+                    ? emberBlock
+                    : $"{{\n  \"mcpServers\": {{\n{emberBlock}\n  }}\n}}\n";
+                File.WriteAllText(configPath, newConfig);
+            }
+
+            if (!silent)
+            {
+                EditorUtility.DisplayDialog("Ember MCP",
+                    $"Installed to {configPath}\n" +
+                    $"Relative path: {RelativeServerPath}\n" +
+                    $"Restart {clientName} for changes to take effect.", "OK");
+            }
+        }
+
+        internal static void RemoveEmberFromConfig(string configPath, string clientName)
+        {
+            try
+            {
+                string content = File.ReadAllText(configPath);
+                File.Copy(configPath, configPath + ".bak", true);
+                string result = RemoveEmberFromConfigInternal(configPath, content,
+                    configPath.EndsWith(".toml"));
+                File.WriteAllText(configPath, result);
+                EditorUtility.DisplayDialog("Ember MCP",
+                    $"Removed from {Path.GetFileName(configPath)}.\n" +
+                    $"Restart {clientName} for changes to take effect.", "OK");
+            }
+            catch (Exception ex)
+            {
+                EditorUtility.DisplayDialog("Uninstall Failed", ex.Message, "OK");
+            }
+        }
+
+        private static string RemoveEmberFromConfigInternal(string configPath, string content, bool isToml)
+        {
+            if (isToml)
+            {
+                int start = content.IndexOf("[mcp_servers.ember]");
+                if (start < 0) return content;
+                int end = content.IndexOf('[', start + 1);
+                if (end < 0) end = content.Length;
+                return content.Remove(start, end - start).TrimEnd();
+            }
+            else
+            {
+                int serversIdx = content.IndexOf("\"mcpServers\"");
+                if (serversIdx < 0) return content;
+                int braceStart = content.IndexOf('{', serversIdx);
+                if (braceStart < 0) return content;
+                int depth = 0;
+                int braceEnd = braceStart;
+                for (int i = braceStart; i < content.Length; i++)
+                {
+                    if (content[i] == '{') depth++;
+                    else if (content[i] == '}') depth--;
+                    if (depth == 0) { braceEnd = i + 1; break; }
+                }
+                int comma = content.LastIndexOf(',', serversIdx);
+                if (comma >= 0 && comma > serversIdx - 10)
+                    return content.Remove(comma, braceEnd - comma);
+                else
+                    return content.Remove(serversIdx, braceEnd - serversIdx);
+            }
         }
     }
 }
