@@ -198,7 +198,6 @@ namespace Ember.Editor
             CloseClient();
             s_Listener?.Stop();
             s_Thread?.Join(1000);
-            DeleteInstanceFile();
             ActivePort = -1;
         }
 
