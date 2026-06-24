@@ -406,7 +406,9 @@ public class SpawnMinionSystem : SystemBase
 
 ### 4.8 并行 System（JobSystemBase）
 
-继承 `JobSystemBase` 声明读写访问 + 实现 `IEmberChunkJob`，框架自动推导依赖图并 `Parallel.ForEach` 按 Chunk 并行调度。
+继承 `JobSystemBase` 声明读写访问 + 实现 `IEmberChunkJob`，框架自动推导依赖图并并行调度。
+
+**默认路径（Parallel.ForEach，零配置）：**
 
 ```csharp
 public class MovementSystem : JobSystemBase
@@ -427,20 +429,28 @@ public class MovementSystem : JobSystemBase
 
         public void Execute(Chunk chunk, int chunkIndex)
         {
-            var positions = chunk.GetColumn<Position>();
-            var velocities = chunk.GetColumn<Velocity>();
+            var pos = chunk.GetColumn<Position>();
+            var vel = chunk.GetColumn<Velocity>();
             for (int i = 0; i < chunk.Count; i++)
-            {
-                ref var pos = ref positions[i];
-                var vel = velocities[i];
-                pos.X += vel.X * DeltaTime;
-            }
+                pos[i].X += vel[i].X * DeltaTime;
         }
     }
 }
+```
 
-// 注册方式和 SystemBase 完全一样
-ticker.Register<MovementSystem>();
+**高级路径（IJobParallelFor + Burst，需实现 ExecuteUnsafe）：**
+
+```csharp
+private struct MoveJobBurst : IEmberChunkJob, IJobParallelFor
+{
+    public float DeltaTime;
+    [ReadOnly] public NativeArray<ChunkJobMeta> Metas;
+
+    public void Execute(Chunk chunk, int i) { } // unused
+    public unsafe void ExecuteUnsafe(void* buf, int count, int idx) { /* Burst-compatible */ }
+
+    // IJobParallelFor — 直接调用 ChunkJobScheduler.ScheduleUnsafe<T>
+}
 ```
 
 **类层次：**
@@ -450,7 +460,7 @@ EcsSystem（共享生命周期）
   └── JobSystemBase — DeclareAccess + CompileJob → IEmberChunkJob（并行）
 ```
 
-同一层内无冲突的 JobSystemBase 通过 `Parallel.ForEach` 并行执行；`SystemBase` 未声明访问时自动采用保守策略（与所有系统互斥）。
+`SystemBase` 未声明访问时自动保守策略（与所有系统互斥）。
 
 ## 5. 查询（Query）
 
