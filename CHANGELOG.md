@@ -2,6 +2,24 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.5.1-preview] — 混合层语义修复 + 零分配加固
+
+### Fixed
+- **SystemTicker 混合层**：混入 SystemBase/DeclaredSystemBase 的层整层串行执行，不再跳过非 JobSystem。
+- **NativeArray 泄漏**：`ScheduleAsync` + `SystemTicker` 加 try-finally/catch 保护，异常路径不泄漏。
+
+### Added
+- **`DeclaredSystemBase`**：串行 System 声明读写访问后参与依赖图，不被当作全局 barrier。
+- **`Slot<TComponent>()`**：`JobSystemBase` 提供组件槽位索引查询，用户不再手算 Comp0-3。
+- **`MovementChunkMeta.Wrap()`**：Source Generator 编译期生成类型安全 wrapper。
+- **ChunkJobMeta overflow**：≤4 固定槽位零开销，>4 透明溢出缓冲（内部指针，用户无感知）。
+
+### Perf
+- **预计算 AllComponentTypes[]**：`BuildAccess` 时排序一次，调度时不再每帧 `new List` + registry 扫描。
+- **Warning 一次**：overflow warning 改为 static bool，每次 session 只打一次。
+- **systemIndices 复用**：`List<int>(8)` 跨层复用。
+- **`GetTimestamp()`**：替代 `Stopwatch.StartNew()`，零分配计时。
+
 ## [0.5.0-preview] — IJobParallelFor 默认路径 + 零分配调度
 
 ### Changed — Breaking
