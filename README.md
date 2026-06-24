@@ -406,29 +406,32 @@ public class SpawnMinionSystem : SystemBase
 
 ### 4.8 并行 System（JobSystemBase）
 
-继承 `JobSystemBase` 声明读写访问，框架自动推导依赖图并在无冲突时并行执行：
+继承 `JobSystemBase` 声明读写访问，框架自动推导依赖图。当前阶段依赖图层结构已就位，执行走串行 fallback；Phase 4 将实现 IJobChunk 真并行调度。
 
 ```csharp
 public class MovementSystem : JobSystemBase
 {
     protected override void DeclareAccess(AccessBuilder access)
     {
+        // 声明本系统读/写哪些组件，框架据此自动推导依赖图
         access.Read<Velocity>().Write<Position>();
     }
 
-    protected override void OnTick(SystemContext ctx)
-    {
-        // 和 SystemBase 一样手写循环，但执行时自动并行调度
-        foreach (var chunk in ctx.QueryChunks<Position, Velocity>())
-        {
-            // ...
-        }
-    }
+    // Phase 4: 重写 CompileJob 返回 IJobChunk，实现 Chunk 级并行 + Burst
 }
 
 // 注册方式和 SystemBase 完全一样
 ticker.Register<MovementSystem>();
 ```
+
+**类层次：**
+```
+EcsSystem（共享生命周期）
+  ├── SystemBase  — OnTick 手写循环（单线程）
+  └── JobSystemBase — DeclareAccess + CompileJob（并行）
+```
+
+`SystemBase` 未声明访问时自动采用保守策略（与所有系统互斥），确保不加声明就不会引入并发问题。
 
 ## 5. 查询（Query）
 
