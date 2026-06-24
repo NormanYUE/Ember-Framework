@@ -406,18 +406,37 @@ public class SpawnMinionSystem : SystemBase
 
 ### 4.8 并行 System（JobSystemBase）
 
-继承 `JobSystemBase` 声明读写访问，框架自动推导依赖图。当前阶段依赖图层结构已就位，执行走串行 fallback；Phase 4 将实现 IJobChunk 真并行调度。
+继承 `JobSystemBase` 声明读写访问 + 实现 `IEmberChunkJob`，框架自动推导依赖图并 `Parallel.ForEach` 按 Chunk 并行调度。
 
 ```csharp
 public class MovementSystem : JobSystemBase
 {
     protected override void DeclareAccess(AccessBuilder access)
     {
-        // 声明本系统读/写哪些组件，框架据此自动推导依赖图
         access.Read<Velocity>().Write<Position>();
     }
 
-    // Phase 4: 重写 CompileJob 返回 IJobChunk，实现 Chunk 级并行 + Burst
+    protected override IEmberChunkJob CompileJob(SystemContext ctx)
+    {
+        return new MoveJob { DeltaTime = ctx.DeltaTime };
+    }
+
+    private struct MoveJob : IEmberChunkJob
+    {
+        public float DeltaTime;
+
+        public void Execute(Chunk chunk, int chunkIndex)
+        {
+            var positions = chunk.GetColumn<Position>();
+            var velocities = chunk.GetColumn<Velocity>();
+            for (int i = 0; i < chunk.Count; i++)
+            {
+                ref var pos = ref positions[i];
+                var vel = velocities[i];
+                pos.X += vel.X * DeltaTime;
+            }
+        }
+    }
 }
 
 // 注册方式和 SystemBase 完全一样
@@ -428,10 +447,10 @@ ticker.Register<MovementSystem>();
 ```
 EcsSystem（共享生命周期）
   ├── SystemBase  — OnTick 手写循环（单线程）
-  └── JobSystemBase — DeclareAccess + CompileJob（并行）
+  └── JobSystemBase — DeclareAccess + CompileJob → IEmberChunkJob（并行）
 ```
 
-`SystemBase` 未声明访问时自动采用保守策略（与所有系统互斥），确保不加声明就不会引入并发问题。
+同一层内无冲突的 JobSystemBase 通过 `Parallel.ForEach` 并行执行；`SystemBase` 未声明访问时自动采用保守策略（与所有系统互斥）。
 
 ## 5. 查询（Query）
 
