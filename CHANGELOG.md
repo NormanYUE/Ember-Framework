@@ -4,6 +4,14 @@ All notable changes to the Ember ECS Framework.
 
 ## [0.6.0-preview] — 真并行调度 + MCP 同步
 
+### Fixed
+- **SimpleJson.BuildJson 数字误判**：`char.IsDigit(v[0])` 导致 `"10_ECSVsOOP"` 输出为非法 JSON `10_ECSVsOOP`。改为 `IsNumeric()` 全量校验。
+- **McpTools 命令列表过期**：描述改为分类引用，不再硬编码 26 个旧命令。
+- **advance_frame deltaTime**：`GetInt` → `GetFloat`，正确解析 `0.0167`。
+- **MCP Server 初始连接失败不退出**：改为重试而非直接 exit。
+- **MCP Server domain reload 超时不足**：渐进延迟 70s（5×2s + 12×5s）。
+- **并行层 EndSystemExecution 顺序**：移到 `EndParallelLayer` 之前执行。
+
 ### Added
 - **WorldSafety 并行层**：`BeginParallelJobLayer()`/`EndParallelJobLayer()` 允许多系统同层并发。
 - **JobHandle 依赖链**：`JobSystem<TJob>.ScheduleJob` 返回 `JobHandle`，Ticker 收集→`CombineDependencies`→`Complete`。
