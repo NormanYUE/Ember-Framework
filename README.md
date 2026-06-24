@@ -27,6 +27,7 @@
 using Ember;
 
 var manager = new ECSManager();
+ECSManager.Active = manager; // 让 Editor 调试工具和 MCP 发现此实例
 
 // 创建 Ticker（返回整数索引，热路径零开销）
 int fixedIdx = manager.CreateTicker();
@@ -52,6 +53,7 @@ public class BattleBootstrap : MonoBehaviour
     void Start()
     {
         m_Manager = new ECSManager();
+        ECSManager.Active = m_Manager; // 让 Editor 调试工具和 MCP 发现此实例
 
         m_FixedIdx = m_Manager.CreateTicker();
         m_UpdateIdx = m_Manager.CreateTicker();
@@ -81,6 +83,8 @@ public class BattleBootstrap : MonoBehaviour
 
     void OnDestroy()
     {
+        if (ECSManager.Active == m_Manager)
+            ECSManager.Active = null;
         m_Manager.Dispose();
     }
 }
