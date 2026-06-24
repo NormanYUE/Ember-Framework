@@ -2,6 +2,26 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.6.0-preview] — 真并行调度 + MCP 同步
+
+### Added
+- **WorldSafety 并行层**：`BeginParallelJobLayer()`/`EndParallelJobLayer()` 允许多系统同层并发。
+- **JobHandle 依赖链**：`JobSystem<TJob>.ScheduleJob` 返回 `JobHandle`，Ticker 收集→`CombineDependencies`→`Complete`。
+- **注册顺序定向依赖**：`DependsOn(a,b)` 改为 `hasConflict && a > b`，后注册依赖先注册。
+- **QueryMask 拆分**：`GetQueryMask()` 虚拟属性，默认 = AllMask，可重写缩小查询范围。
+- **MCP `get_system_info`**：按 tickerIndex+systemName 查系统类型/计时/hooks。
+- **MCP `capabilities` 更新**：`supportsParallelism`/`supportsJobSystem`/`supportsDependencyGraph`。
+- **MCP `get_dependency_graph` 增强**：每层输出含系统类型（`{name, type}`）。
+
+### Perf
+- **systemIndices 字段复用**：`List<int>` 类字段，跨层复用。
+- **移除 LINQ**：`layer.Systems.All()` → 手动 for 循环，消除 delegate 分配。
+- **移除 `System.Linq`**：`SystemTicker` + `DependencyGraph` 无 LINQ 依赖。
+
+### Changed
+- `JobSystemBase.ScheduleJob` 返回值 `void` → `JobHandle`。
+- `ChunkJobScheduler.Schedule<T>` 保持兼容（同步 Complete），`ScheduleAsync<T>` 供框架内部。
+
 ## [0.5.2-preview] — 性能 + 稳健性扫除
 
 ### Perf
