@@ -2,6 +2,39 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.4.0-preview] — 并行化 + MCP v0.4.0
+
+### Added — 并行化
+- **EcsSystem 抽象基类**：提取 OnCreate/OnDestroy/生命周期钩子/ECB，SystemBase 和 JobSystemBase 兄弟类共享。
+- **JobSystemBase**：声明读写访问 + CompileJob → IEmberChunkJob，框架自动依赖图 + 并行调度。
+- **AccessBuilder**：`access.Read<T>().Write<T>()` fluent 声明，框架据此推导依赖图。
+- **DependencyGraph**：拓扑分层 + 保守掩码互斥（未声明 = 与所有系统串行）。同层无冲突系统并行。
+- **SystemTicker 层调度**：`Tick()` 按 Layer 执行，并行层走 ChunkJobScheduler，串行层走 TickSystemAt。
+- **ChunkJobScheduler**：双路径 — `Schedule()`（Parallel.ForEach，默认）+ `ScheduleUnsafe<T>()`（IJobParallelFor + Burst-ready）。
+- **SystemTicker 计时环**：per-system 20-tick 环 avg/max，3-entry 错误环，tickCount。
+
+### Added — MCP v0.4.0
+- **统一 `ember_execute` 协议**：12 分散工具 → 40 命令入口，一次 TCP 往返批量执行。
+- **BufferHandle 内省**：`get_buffer`（entity+fieldPath / singleton+fieldPath）、BufferStore 分布统计。
+- **统一 envelope**：`{ok, world, data/error, warnings, truncated, nextCursor}` + 结构化错误码。
+- **新增命令**：`capabilities`、`list_worlds`、`component_schema`（isBufferHandle/isEntity/isWritable）、`validate_component_payload`（fieldPath 级错误）、`query_entities_v2`（all/any/none）、`get_entity_full`（BufferHandle 摘要）、`get_singletons`（namesOnly）、`system_status`（avg/max/tickCount/error 环）、`world_snapshot`（snapshotId + 分布）、`snapshot_diff`、`trace_entity`、`query_archetypes`、`safe_write_batch`（默认 dryRun）。
+- **World introspection API**：`EnumerateBufferStores()`、`GetBufferInfo()`、`ReadBufferSample()`、`FindBufferOwners()`。
+
+### Fixed
+- MCP Server 断线后自动重连（10 次 × 2s），不再致命退出。
+- 重连后 warmup ping 防首包超时。
+- `ECSManager.Start()` 自动设置 `Active = this`，Dispose 自动清理。
+- `get_ecs_status` null manager 守卫。
+- `safe_write_batch` ECB create_entity tempIndex 修复 → 直接执行。
+- `AccessBuilder` struct 副本修复。
+
+### Changed
+- `SystemBase` 移除了 `OnCreate`/`OnDestroy`/钩子 → 迁移到 `EcsSystem`（向后兼容，零改动）。
+- `SystemTicker.Register<T>()` 约束从 `SystemBase` 改为 `EcsSystem`。
+- `SystemGroup : SystemBase : EcsSystem` 继承链不变。
+
+---
+
 ## [0.3.0] — Editor 可视化调试工具
 
 ### Added
