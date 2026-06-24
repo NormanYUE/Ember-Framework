@@ -2,6 +2,21 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.5.2-preview] — 性能 + 稳健性扫除
+
+### Perf
+- **ComponentMask >256 COW 消除**：`EnsureExtraCapacityForWrite` 容量足够时不再 `CloneExtraForWrite`。
+- **DeferredDestroy O(1)**：`List` 线性扫描 → `Dictionary` O(1) 查找。
+- **GetDebugView 缓存**：数组只在系统数量变化时重建。
+
+### Fixed
+- **12 处裸 `catch {}`** 改为日志：异常不再静默吞。
+- **Chunk disposed guard**：`AllocRow`/`RemoveAtSwapBack` 加 `ObjectDisposedException`。
+- **Entity version overflow**：`int.MaxValue` wrap 正确重置到 1。
+- **FreeEntityIndices cap**：上限 65536，防止无界增长。
+- **Error message context**：`ComponentTypeRegistry` 异常加 `max registered` 范围。
+- **BufferElement 类型安全**：`Dictionary<Type, object>` → `IBufferElementStore` 泛型接口。
+
 ## [0.5.1-preview] — 混合层语义修复 + 零分配加固
 
 ### Fixed
