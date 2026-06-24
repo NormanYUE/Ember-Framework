@@ -438,20 +438,36 @@ public class MovementSystem : JobSystemBase
 }
 ```
 
-**高级路径（IJobParallelFor + Burst，需实现 ExecuteUnsafe）：**
+**高级路径（IJobParallelFor + Burst，用 ChunkJobMeta offset 直接指针访问）：**
 
 ```csharp
-private struct MoveJobBurst : IEmberChunkJob, IJobParallelFor
+public class MovementSystemBurst : JobSystemBase
 {
-    public float DeltaTime;
-    [ReadOnly] public NativeArray<ChunkJobMeta> Metas;
+    protected override void DeclareAccess(AccessBuilder a) { a.Read<Velocity>().Write<Position>(); }
+    protected override IEmberChunkJob CompileJob(SystemContext ctx) { return null; }
 
-    public void Execute(Chunk chunk, int i) { } // unused
-    public unsafe void ExecuteUnsafe(void* buf, int count, int idx) { /* Burst-compatible */ }
+    protected override void ScheduleJob(World world, SystemContext ctx)
+    {
+        var job = new MoveJob { DT = ctx.DeltaTime };
+        var allMask = ReadMask; allMask.UnionWith(WriteMask);
+        var compiled = world.CompileQuery(new EntityQuery(allMask));
+        var handle = ChunkJobScheduler.ScheduleUnsafe(compiled, job, allMask, default);
+        handle.Complete();
+    }
 
-    // IJobParallelFor — 直接调用 ChunkJobScheduler.ScheduleUnsafe<T>
+    struct MoveJob : IEmberChunkJob
+    {
+        public float DT;
+        public void Execute(Chunk c, int i) { }
+        public unsafe void ExecuteUnsafe(void* buf, int n, int ci) { }
+        // ChunkJobWrapper<T> : IJobParallelFor 自动调度，ChunkJobMeta 含 offset
+    }
 }
 ```
+
+`ScheduleUnsafe<T>` 自动从 ArchetypeLayout 提取 ReadMask 组件的 offset + stride，
+按 ComponentTypeId 升序填入 `ChunkJobMeta.Comp0-3Offset/Stride`。
+Job 内用 `(ComponentType*)((byte*)buf + offset + entityIndex * stride)` 直接访问。
 
 **类层次：**
 ```
