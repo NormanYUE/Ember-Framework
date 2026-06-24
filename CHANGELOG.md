@@ -5,6 +5,7 @@ All notable changes to the Ember ECS Framework.
 ## [0.6.0-preview] — 真并行调度 + MCP 同步
 
 ### Fixed
+- **PlayMode 自动重连**：`EditorApplication.playModeStateChanged` 回调 — 退出 PlayMode/域重载时优雅断连，进入 PlayMode 时自动重启 bridge。不再需要手动 `EmberBridge.Stop(); EmberBridge.Start();`。
 - **SimpleJson.BuildJson 数字误判**：`char.IsDigit(v[0])` 导致 `"10_ECSVsOOP"` 输出为非法 JSON `10_ECSVsOOP`。改为 `IsNumeric()` 全量校验。
 - **McpTools 命令列表过期**：描述改为分类引用，不再硬编码 26 个旧命令。
 - **advance_frame deltaTime**：`GetInt` → `GetFloat`，正确解析 `0.0167`。
