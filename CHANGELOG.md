@@ -2,6 +2,26 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.4.1-preview] — GC 零分配 + IJobParallelFor 接入 + MCP 多实例修复
+
+### Fixed — GC
+- **Stopwatch.StartNew() → GetTimestamp()**：每 system tick 零分配计时。
+- **IEmberChunkJob struct 装箱**：新增 `Schedule<T>()` 泛型重载，struct job 直传不装箱。
+- **No-op 双调度**：新增 `HandlesOwnScheduling` 属性，系统自行调度时跳过默认路径。
+
+### Added — 并行
+- **IJobParallelFor 接入**：`ScheduleUnsafe<T>` 自动从 `ArchetypeLayout` 提取组件 offset/stride 填入 `ChunkJobMeta`，`ChunkJobWrapper<T> : IJobParallelFor` 包装调度。
+- **SystemTicker JobHandle 依赖链**：并行层 `CombineDependencies + Complete` 层边界同步。
+
+### Fixed — MCP
+- **多 Unity 实例端口发现**：`SimpleJson.GetString` 同时解析字符串值和整数值；`ScanPorts` 不再空吞异常。
+- **Heartbeat BOM**：`WriteHeartbeat` 改为 `new UTF8Encoding(false)`，不再写 BOM。
+- **Handshake 容错**：`System.Text.Json` 失败时用 `ParseHandshakeManually` 逐字段提取。
+- **TOML RemoveEmberFromConfig**：修复 `\n[` 误匹配 array bracket 导致裸 JSON 残留。
+- **activeScene null guard**：handshake 和 ProcessQueue 加空串兜底。
+
+---
+
 ## [0.4.0-preview] — 并行化 + MCP v0.4.0
 
 ### Added — 并行化
