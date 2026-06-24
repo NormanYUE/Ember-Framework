@@ -2,6 +2,14 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.5.0-preview] — IJobParallelFor 默认路径 + 零分配调度
+
+### Changed — Breaking
+- **`IEmberChunkJob.Execute` 签名变更**：`Execute(Chunk chunk, int)` → `Execute(ChunkJobMeta meta, int)`。ChunkJobMeta 含 BufferPtr、EntityCount、Comp0-3 Offset/Stride，通过 unsafe 指针直接访问组件数据。
+- **`JobSystem<TJob>` 替代 `JobSystemBase`**：并行 System 继承 `JobSystem<MoveJob>`（泛型），`CompileJob` 返回具体 struct 类型，`Schedule<T>` 自动走 IJobParallelFor（零 delegate/closure/装箱）。
+- **移除 `Parallel.ForEach` 路径**：默认调度改为 `ChunkJobWrapper<T> : IJobParallelFor`，消除托管调度分配。
+- **移除 `ExecuteUnsafe`**：不再需要双路径，IJobParallelFor 是唯一默认路径。
+
 ## [0.4.1-preview] — GC 零分配 + IJobParallelFor 接入 + MCP 多实例修复
 
 ### Fixed — GC

@@ -404,70 +404,53 @@ public class SpawnMinionSystem : SystemBase
 
 约束：当前 `foreach` 体内不能对 pending 实体调用 `GetComponent` / `SetComponent`——实体的初始状态应通过 `ctx.ECB` 设置，ECB 会在系统 Tick 结束后回放。`ctx.CreateEntity()` 也接受可选的 `ComponentMask` 参数指定初始 archetype。
 
-### 4.8 并行 System（JobSystemBase）
+### 4.8 并行 System（JobSystem&lt;TJob&gt;）
 
-继承 `JobSystemBase` 声明读写访问 + 实现 `IEmberChunkJob`，框架自动推导依赖图并并行调度。
-
-**默认路径（Parallel.ForEach，零配置）：**
+继承 `JobSystem<TJob>` 声明读写访问 + CompileJob，框架自动 IJobParallelFor 按 Chunk 并行调度（**零分配**）。
 
 ```csharp
-public class MovementSystem : JobSystemBase
+public class MovementSystem : JobSystem<MoveJob>
 {
-    protected override void DeclareAccess(AccessBuilder access)
+    protected override void DeclareAccess(AccessBuilder a)
     {
-        access.Read<Velocity>().Write<Position>();
+        a.Read<Velocity>().Write<Position>();
     }
 
-    protected override IEmberChunkJob CompileJob(SystemContext ctx)
+    protected override MoveJob CompileJob(SystemContext ctx)
     {
         return new MoveJob { DeltaTime = ctx.DeltaTime };
     }
 
-    private struct MoveJob : IEmberChunkJob
+    struct MoveJob : IEmberChunkJob
     {
         public float DeltaTime;
 
-        public void Execute(Chunk chunk, int chunkIndex)
+        // meta 含 BufferPtr、EntityCount、Comp0-3Offset/Stride
+        // Comp0 = Position（TypeId 最小）、Comp1 = Velocity
+        public unsafe void Execute(ChunkJobMeta meta, int chunkIndex)
         {
-            var pos = chunk.GetColumn<Position>();
-            var vel = chunk.GetColumn<Velocity>();
-            for (int i = 0; i < chunk.Count; i++)
-                pos[i].X += vel[i].X * DeltaTime;
+            var buf = (byte*)meta.BufferPtr;
+            var count = meta.EntityCount;
+            for (int i = 0; i < count; i++)
+            {
+                var pos = (Position*)(buf + meta.Comp0Offset + i * meta.Comp0Stride);
+                var vel = (Velocity*)(buf + meta.Comp1Offset + i * meta.Comp1Stride);
+                pos->X += vel->X * DeltaTime;
+            }
         }
     }
 }
 ```
 
-**高级路径（IJobParallelFor + Burst，用 ChunkJobMeta offset 直接指针访问）：**
-
-```csharp
-public class MovementSystemBurst : JobSystemBase
-{
-    protected override void DeclareAccess(AccessBuilder a) { a.Read<Velocity>().Write<Position>(); }
-    protected override IEmberChunkJob CompileJob(SystemContext ctx) { return null; }
-
-    protected override void ScheduleJob(World world, SystemContext ctx)
-    {
-        var job = new MoveJob { DT = ctx.DeltaTime };
-        var allMask = ReadMask; allMask.UnionWith(WriteMask);
-        var compiled = world.CompileQuery(new EntityQuery(allMask));
-        var handle = ChunkJobScheduler.ScheduleUnsafe(compiled, job, allMask, default);
-        handle.Complete();
-    }
-
-    struct MoveJob : IEmberChunkJob
-    {
-        public float DT;
-        public void Execute(Chunk c, int i) { }
-        public unsafe void ExecuteUnsafe(void* buf, int n, int ci) { }
-        // ChunkJobWrapper<T> : IJobParallelFor 自动调度，ChunkJobMeta 含 offset
-    }
-}
+**类层次：**
+```
+EcsSystem（共享生命周期）
+  ├── SystemBase       — OnTick 手写循环（单线程）
+  └── JobSystemBase     — DeclareAccess（基类，测试用）
+       └── JobSystem<T>  — CompileJob → IJobParallelFor（零分配）
 ```
 
-`ScheduleUnsafe<T>` 自动从 ArchetypeLayout 提取 ReadMask 组件的 offset + stride，
-按 ComponentTypeId 升序填入 `ChunkJobMeta.Comp0-3Offset/Stride`。
-Job 内用 `(ComponentType*)((byte*)buf + offset + entityIndex * stride)` 直接访问。
+**调度路径：** `Schedule<T>` → `ChunkJobWrapper<T> : IJobParallelFor` → Unity Job System 按 Chunk 并行 → `Complete()` 阻塞返回。零 delegate/closure/装箱。
 
 **类层次：**
 ```
