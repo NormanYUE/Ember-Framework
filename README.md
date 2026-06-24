@@ -404,6 +404,32 @@ public class SpawnMinionSystem : SystemBase
 
 约束：当前 `foreach` 体内不能对 pending 实体调用 `GetComponent` / `SetComponent`——实体的初始状态应通过 `ctx.ECB` 设置，ECB 会在系统 Tick 结束后回放。`ctx.CreateEntity()` 也接受可选的 `ComponentMask` 参数指定初始 archetype。
 
+### 4.8 并行 System（JobSystemBase）
+
+继承 `JobSystemBase` 声明读写访问，框架自动推导依赖图并在无冲突时并行执行：
+
+```csharp
+public class MovementSystem : JobSystemBase
+{
+    protected override void DeclareAccess(AccessBuilder access)
+    {
+        access.Read<Velocity>().Write<Position>();
+    }
+
+    protected override void OnTick(SystemContext ctx)
+    {
+        // 和 SystemBase 一样手写循环，但执行时自动并行调度
+        foreach (var chunk in ctx.QueryChunks<Position, Velocity>())
+        {
+            // ...
+        }
+    }
+}
+
+// 注册方式和 SystemBase 完全一样
+ticker.Register<MovementSystem>();
+```
+
 ## 5. 查询（Query）
 
 系统内查询通过 `SystemContext.QueryChunks()` 或 `EcsAPI.Query()` 两种方式：
