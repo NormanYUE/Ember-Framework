@@ -427,15 +427,13 @@ public class MovementSystem : JobSystem<MoveJob>
 
         // meta 含 BufferPtr、EntityCount、Comp0-3Offset/Stride
         // Comp0 = Position（TypeId 最小）、Comp1 = Velocity
-        public unsafe void Execute(ChunkJobMeta meta, int chunkIndex)
+        public void Execute(ChunkJobMeta meta, int chunkIndex)
         {
-            var buf = (byte*)meta.BufferPtr;
-            var count = meta.EntityCount;
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < meta.EntityCount; i++)
             {
-                var pos = (Position*)(buf + meta.Comp0Offset + i * meta.Comp0Stride);
-                var vel = (Velocity*)(buf + meta.Comp1Offset + i * meta.Comp1Stride);
-                pos->X += vel->X * DeltaTime;
+                ref var pos = ref meta.Ref<Position>(0, i);
+                var vel = meta.Read<Velocity>(1, i);
+                pos.X += vel.X * DeltaTime;
             }
         }
     }
