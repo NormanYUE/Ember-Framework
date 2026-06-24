@@ -1067,18 +1067,22 @@ AI Client            MCP Server           Unity Editor
 | `--allow-write` | 启用写工具（默认只读） |
 | `--port <n>` | 手动指定端口（通常不需要，MCP Server 会从 `instance.json` 自动读取） |
 
-### 14.3 Command Reference (26 commands via `ember_execute`)
+### 14.3 Command Reference (41 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
-**Read (10):** world_info, query_entities, get_entity, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_buffer_elements, entity_counts
+**Read (12):** world_info, query_entities, query_entities_v2, get_entity, get_entity_full, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_singletons, get_buffer_elements, entity_counts
 **Write (6):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton
 **Batch (2):** add_component_batch, remove_component_batch
-**Buffer (4):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element
-**Manager (3):** mcp_status, get_ecs_status, advance_frame
-**Aux (1):** resolve_component
+**Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
+**Diagnostic (8):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities
+**System (4):** system_status, get_system_info, get_dependency_graph, advance_frame
+**Entity (2):** trace_entity, query_archetypes
+**Write Safety (1):** safe_write_batch
+**World (1):** list_worlds
 
-Example: `{"op": "query_entities", "components": ["Position"], "limit": 10}`
+Example: `{"op": "query_entities_v2", "all": ["Position"], "limit": 10}`
+Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSystem"}`
 
 ### 14.4 使用示例
 
