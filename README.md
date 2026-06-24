@@ -429,10 +429,13 @@ public class MovementSystem : JobSystem<MoveJob>
         // Comp0 = Position（TypeId 最小）、Comp1 = Velocity
         public void Execute(ChunkJobMeta meta, int chunkIndex)
         {
-            for (int i = 0; i < meta.EntityCount; i++)
+            // Source Generator 自动生成 MovementChunkMeta，含 Position/Velocity 类型安全访问
+            // 按 ComponentTypeId 升序 → Position(Comp0), Velocity(Comp1)
+            var m = MovementChunkMeta.Wrap(meta);
+            for (int i = 0; i < m.EntityCount; i++)
             {
-                ref var pos = ref meta.Ref<Position>(0, i);
-                var vel = meta.Read<Velocity>(1, i);
+                ref var pos = ref m.Position(i);
+                var vel = m.Velocity_RO(i);
                 pos.X += vel.X * DeltaTime;
             }
         }
