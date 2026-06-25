@@ -4,6 +4,12 @@ All notable changes to the Ember ECS Framework.
 
 ## [0.6.0-preview] — 真并行调度 + MCP 同步
 
+### Added
+- **ComponentInspector 可编辑**：Play Mode 下 int/float/double/bool/long/string 字段直接编辑，`World.SetComponent<T>` 自动回写。
+- **SystemsWindow 计时列**：LastTick(ms)、Avg、Max、TickCount、LastError，>1ms 红色高亮。
+- **SystemsWindow 并行层视图**：Toggle 显示每层系统列表，并行层绿色标识，串行层默认色。
+- **Agent 体系**：`ember-dev` 主入口 + `ember-code-review`/`ember-perf-check`/`ember-unit-test`/`ember-release`。
+
 ### Fixed
 - **PlayMode 自动重连**：`EditorApplication.playModeStateChanged` 回调 — 退出 PlayMode/域重载时优雅断连，进入 PlayMode 时自动重启 bridge。不再需要手动 `EmberBridge.Stop(); EmberBridge.Start();`。
 - **SimpleJson.BuildJson 数字误判**：`char.IsDigit(v[0])` 导致 `"10_ECSVsOOP"` 输出为非法 JSON `10_ECSVsOOP`。改为 `IsNumeric()` 全量校验。
