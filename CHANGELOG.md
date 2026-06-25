@@ -2,6 +2,30 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.7.0-preview] — 开发 Agent 体系 + Editor 工具增强
+
+### Added
+- **开发 Agent 体系**：`ember-dev` 主入口 + `ember-code-review`/`ember-perf-check`/`ember-unit-test`/`ember-release` 子 Agent，覆盖代码审查、性能检查、单元测试、发布流程。
+- **ComponentInspector 可编辑**：Play Mode 下 int/float/double/bool/long/string 字段直接编辑，`World.SetComponent<T>` 通过反射自动回写。
+- **SystemsWindow 计时列**：LastTick(ms)、Avg、Max、TickCount、LastError 列，>1ms 红色高亮。
+- **SystemsWindow 并行层视图**：Toggle `DrawParallelLayers` 显示每层系统列表，并行层绿色标识，串行层默认色。
+- **Bridge 自动重连**：`EditorApplication.playModeStateChanged` 回调，退出 PlayMode 优雅断连，进入 PlayMode 自动重启。
+- **SystemBase 公开接口统一**：`DeclaredSystemBase` 替代 `SystemBase` 作为用户继承入口，`SystemBase` 改为 internal。
+
+### Fixed
+- **8 个 Write Command 修复**：struct 副本修复（`AddComponentToMask` 传 ref）、NRE 守卫、`FindWorldMethod` 消除 Entity/int 重载歧义、batch 验证、`remove_component` 加 HasComponent 检查。
+- **3 个 JSON/Parsing 修复**：`SimpleJson.IsNumeric()` 全量校验消除 `"10_ECSVsOOP"` 误判、stale ops 清理、`advance_frame deltaTime` GetFloat。
+- **4 个 MCP Bridge 稳定性修复**：初始连接失败不退出、渐进重连延迟 70s、Heartbeat BOM 修复、并行层 EndTick 执行顺序。
+
+### Changed
+- **EmberBridgeCommands.cs 拆分**：2872 行 monolith → 主文件 2788 行 + `EmberBridgeCommands.Helpers.cs`（93 行），8 个 helper 方法提取为 partial class。
+- **CLAUDE.md 更新**：补充并行调度、MCP bridge、开发 workflow 文档。
+
+### Perf
+- **并行层零分配计时**：`GetTimestamp()` 替代 `Stopwatch.StartNew()`，消除 per-system tick 分配。
+
+---
+
 ## [0.6.0-preview] — 真并行调度 + MCP 同步
 
 ### Added
