@@ -1,6 +1,6 @@
 {
   "name": "com.ember.ecs",
-  "version": "0.7.4-preview",
+  "version": "0.7.5-preview",
   "displayName": "Ember ECS",
   "unity": "2022.3",
   "description": "A powerful ECS framework",

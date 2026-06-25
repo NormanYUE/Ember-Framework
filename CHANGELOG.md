@@ -2,6 +2,18 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.7.5-preview] — Skills 一键安装 + 数据流视图优化
+
+### Added
+- **Skills 一键安装**：MCP 窗口新增 Skills foldout，一键安装 `ember-perf-optimize`（性能优化）和 `ember-architecture`（架构指南）到项目 `.claude/skills/`，Claude Code 和 Codex 自动发现。`EmberSkillManager` 内嵌完整 SKILL.md 内容为编译时常量，`IsInstalled()` 运行时文件存在性检查。
+- **ember-perf-optimize skill**：覆盖 System 类型选择、DeclareAccess 精确度、Job 结构体设计、ChunkJobMeta 访问、Structural Change 优化、NativeArray 生命周期等 8 个优化域。MCP 诊断工作流：world_info → system_status → get_dependency_graph → get_archetypes。
+- **ember-architecture skill**：覆盖存储模型（Entity/Component/Archetype/Chunk/SOA）、System 类型体系（SystemBase/DeclaredSystemBase/JobSystem/SystemGroup）、查询管线（ctx.QueryChunks/QueryBuilder/Aspect）、ECB/Buffer/Singleton、DependencyGraph 并行调度、MCP 调试命令速查表。
+
+### Changed
+- **数据流视图**：按执行层排序展示（refine: data flow view — display by execution layer order）
+
+---
+
 ## [0.7.1-preview] — Editor 窗口列对齐修复 + Entities 界面简化
 
 ### Fixed
