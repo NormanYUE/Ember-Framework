@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.7.1-preview] — Editor 窗口列对齐修复 + Entities 界面简化
+
+### Fixed
+- **4 个 Editor 窗口列对齐**：`SystemsWindow`/`EntitiesWindow`/`ArchetypesWindow`/`ComponentTypesWindow` 表头与数据行宽度错位。根因：表头在 `ScrollView` 外用 `EditorStyles.toolbar`，数据行在内用 `EditorStyles.helpBox`，滚动条 + 内边距差异导致对齐偏移。修复：表头统一移入 `BeginScrollView`，用 `EditorGUI.DrawRect` + 手动 `Rect` 定位，列宽常量化。
+
+### Changed
+- **EntitiesWindow 简化**：移除内联 Components 列，点击 Entity 自动打开 `EntityInspectorWindow` 独立查看组件详情。工具栏 Filter 改用 `EditorStyles.toolbarSearchField`。
+
+---
+
 ## [0.7.0-preview] — 开发 Agent 体系 + Editor 工具增强
 
 ### Added
