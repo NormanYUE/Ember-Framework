@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.2-preview] — Type.Name 缓存消除 GC
+
+### Perf
+- **组件类型名缓存**：`ValidateAccess` 循环中每帧调用 `Type.Name` 产生 ~12.5KB GC。修复：`Init()` 时一次性缓存到 `m_CachedTypeNames[]`，热路径直接索引访问（零分配）。
+
 ## [0.10.1-preview] — ValidateAccess GC 分配修复
 
 ### Perf
