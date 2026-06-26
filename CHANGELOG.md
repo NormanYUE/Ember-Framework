@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.1-preview] — ValidateAccess GC 分配修复
+
+### Perf
+- **ValidateAccess 零分配**：4 个 `new List<string>()` + 4 个 `.ToArray()` 替换为复用缓存 + `Array.Empty<string>()`。访问声明正确时每帧零分配，消除 ~56 次/帧的 GC 压力。
+
 ## [0.10.0-preview] — Access 验证 + 实体命名 + 编辑器代码隔离
 
 ### Added
