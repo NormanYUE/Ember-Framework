@@ -2,7 +2,24 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.9.0-preview] — Graph 独显 + 性能数据 + 跑马灯长名称
+## [0.10.0-preview] — Access 验证 + 实体命名 + 编辑器代码隔离
+
+### Added
+- **Access 运行时验证**：`SystemContext` 自动追踪 Get/Set/Add/Remove 的实际组件访问，tick 结束后对比 DeclareAccess 声明。漏声明（红色）→ Console Warning；过度声明（黄色）→ 限制并行度提示。全部 `#if UNITY_EDITOR` 零运行时开销。
+- **Systems Window 验证着色**：Graph 节点按访问一致性染色——🔴 红色 = 漏声明、🟡 黄色 = 过度声明、⚪ 默认 = 一致。鼠标悬停 Tooltip 列出具体差异。选中节点详情面板显示完整验证报告。
+- **实体命名**：新增 `EntityName : IDataComponent`（FixedString64Bytes，零 GC）。有名称的实体在 Entities Window / Inspector 中优先显示名称，无则回退 `E(Index, vVersion)`。
+- **原型自动命名**：Archetypes Window 显示可读名称（如 `Position+Velocity+…(+3)`），替代 `Arch #0`。
+
+### Changed
+- **Editor 代码隔离**：所有运行时中为 Editor 调试增加的代码统一包裹 `#if UNITY_EDITOR`（15 文件，csproj + 14 源文件）。`DefineConstants` 新增 `UNITY_EDITOR`。
+
+### Fixed
+- **Systems Window 点击检测**：节点点击改为使用完整节点 Rect，修复"点不中"问题。
+- **Marquee 动画卡顿**：OnGUI 末尾添加 Repaint()，滚动不再依赖鼠标移动。
+- **节点信息精简**：组件显示改为 `R:3 W:1` + `Entities: 42`（计数替代完整列表），详情面板保留完整信息。
+
+### Other
+- **ember-perf-optimize skill**：新增 §2b Access Validation 优化章节——着色规则、Tooltip、Console 警告、优化流程、代码示例。
 
 ### Added
 - **Graph 独显**：Systems Window 移除 Table 视图，Graph 为唯一展示模式。简化 Toolbar，仅保留 Ticker 下拉。
