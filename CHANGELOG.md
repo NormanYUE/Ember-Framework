@@ -2,6 +2,20 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.8.0-preview] — 依赖图可视化 + 发布流程修复
+
+### Added
+- **依赖图视图**：Systems Window 新增 Graph/Table 切换按钮，Graph 视图以分层节点图展示依赖关系。并行层绿色背景、串行层灰色背景，系统节点显示类型和 Read/Write 组件访问列表。箭头标识依赖方向，选中节点底部详情面板展示 Hook、组件访问、层信息。
+
+### Changed
+- **包发布策略**：`com.ecsframework.jygames/Editor/` 只发布预编译 `Ember.Editor.dll`，不再包含源文件。源码留在框架仓库，`Editor/Ember.Editor.csproj` 编译产出 DLL。
+
+### Fixed
+- **MCP 连接稳定性**：修复 `s_Client.Connected` 在 macOS 不可靠导致的响应静默丢弃、`ListenLoop` 异常未 break 导致 TCP 连接被 finally 关闭、`Execute()` 抛异常而非返回 error JSON 等多个连接重置问题。
+- **MCP 安装流程**：修复 `--port` 写死、路径依赖绝对路径、缺少 `runtimeconfig.json` 导致 `dotnet exec` 崩溃、JSON 合并时多出逗号等问题。新增一键 Install/Uninstall、自动路径更新。
+
+---
+
 ## [0.7.5-preview] — Skills 一键安装 + 数据流视图优化
 
 ### Added
