@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.9.0-preview] — Graph 独显 + 性能数据 + 跑马灯长名称
+
+### Added
+- **Graph 独显**：Systems Window 移除 Table 视图，Graph 为唯一展示模式。简化 Toolbar，仅保留 Ticker 下拉。
+- **性能数据显示**：Graph 节点上直接展示 Avg ms，超过 1ms 红色高亮。点击节点，详情面板展示 Last Tick / Average / Max / Tick Count 四项性能指标。
+- **跑马灯自动滚动**：系统名称超出节点宽度时自动左右往复滚动（40px/s），两端各暂停 1 秒以便阅读。
+
+### Changed
+- **Systems Window 精简**：移除 Table 视图、Graph/Table 切换按钮、Lifecycle/Layers 勾选框。净减 83 行。
+
 ## [0.8.0-preview] — 依赖图可视化 + MCP 稳定性修复
 
 ### Added
