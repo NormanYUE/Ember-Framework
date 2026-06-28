@@ -2,7 +2,31 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.10.2-preview] — Type.Name 缓存消除 GC
+## [0.10.3-preview] — Chunk 池化 + GC 热路径消除
+
+### Fixed
+- **TypeIdEnumerator off-by-one**：`MoveNext()` 未在移出 set bit 后递增 `m_BitPos`，导致同一 word 内首个 bit 之后的所有 bit 偏移 -1，Archetype 创建丢失组件类型。
+- **ECB Allocator.Temp→Persistent**：ECB 池化后 `Clear()` 跨帧复用，但 `Allocator.Temp` 每帧释放，导致 use-after-free。修复：默认 `Allocator.Persistent` + `DisposeECB()` 正确清理。
+- **Tag GetComponent 错误**：`Chunk.GetComponent<T>()` 对 Tag 组件抛出 "cannot get data for tag" 异常。修复：合并到 `offset<0` 分支，Editor 和 Release 均正确处理。
+- **Tag SetComponent 兼容**：业务代码对 Tag 调用 `SetComponent<T>()` 导致异常。修复：检测 `ComponentKind.Tag`，已有 Tag → no-op，缺少 Tag → `AddComponentAt` 自动添加。
+
+### Added
+- **archetype_layout_report MCP 命令**：布局分析、浪费检测、组件拆分分析。返回 topByEntities、topByWaste、emptyChunks、componentSplitAnalysis、summary。
+- **Profiling 运行时开关**：`EmberProfiler.Enabled` 静态开关，MCP 窗口一键开启/关闭 ProfilerMarker，无需重新编译。
+- **EMBER_ENABLE_PROFILING 条件编译**：csproj 默认 `EMBER_ENABLE_PROFILING` 启用，可通过 `-p:EmberEnableProfiling=false` 关闭。单元测试默认关闭。
+
+### Perf
+- **4 项 CPU 吞吐优化**：扩展内联索引 512 槽（减少 Dictionary 查找）、GetChunks 缓存命中跳过 O(N) 重验证、De Bruijn TZ 表替代 BitOperations、Tag check guard 跳过无数据路径。
+- **ECB 池化**：`SystemContext` 中 ECB 的 `Clear()` 替代 `Dispose()+null`，消除每帧 ECB 分配。
+- **CreateArchetype List 消除**：`CreateArchetype` 和 `GetOrBuildCopyPlan` 中用两遍计数+预分配数组替代 `List<T>`；修复 `ComponentMask.ExtraWords` 共享修改 bug（struct 复制后共享引用）。
+- **EmberEditorGuard**：Debug 窗口关闭时跳过所有 Editor 追踪（结构变更计数、访问验证 BitSet），`DebugWindowRefCount` 引用计数。
+- **Editor CPU 优化**：`Texture2D` 创建替换为 `GUI.backgroundColor`（零分配）、`MethodInfo` 缓存避免每帧反射、SystemsWindow cached views 300ms 刷新、Repaint 节流 50ms。
+- **4 项 GC 修复**：enum-based `ThrowIfEntityIndexNotAlive`（避免字符串插值）、`TryGetComponentRef<T>` 零分配 TryGet、`EntityQueryCache` 预创建常用查询、`GetSetTypes()` 零分配枚举器。
+- **per-system result cache**：`GetOrCopyResult` 为每个 system 独立缓存验证结果，消除 system 间互相 invalidate 导致的频繁分配。
+- **ValidateAccess 零分配**：`List<string>` 替换为预分配 `string[]` 缓冲区，声明正确时零分配。
+- **Chunk 池化**：空 Chunk 不 Dispose 而是进入池（上限 8），`FindOrCreateChunkSlot` 优先从池取，消除 ECB 创建/销毁循环中的 ~4.5KB GC 抖动。
+- **CompiledQueryCore List 预分配**：`m_Chunks` 初始容量 0→64，消除 0→4→8→16→32→64 级联扩容中的 ~1KB GC。
+- **GetColumnFast 快速路径**：内部热路径（`ComponentPackColumnCache`、`ApplyDeferredComponentWrites`）使用无 Profiling 标记的 `GetColumnFast<T>()`，减少 96B 微分配。
 
 ### Perf
 - **组件类型名缓存**：`ValidateAccess` 循环中每帧调用 `Type.Name` 产生 ~12.5KB GC。修复：`Init()` 时一次性缓存到 `m_CachedTypeNames[]`，热路径直接索引访问（零分配）。
