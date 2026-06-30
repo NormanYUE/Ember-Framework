@@ -4,8 +4,6 @@
 
 在 Unity 项目中安装 Ember ECS 框架：
 
-**方式一：Package Manager（推荐）**
-
 1. 打开 `Window > Package Manager`
 2. 点击 `+` → `Install package from git URL`
 3. 输入以下 URL：
@@ -14,15 +12,7 @@
 https://github.com/NormanYUE/Ember-Framework.git
 ```
 
-**方式二：手动编辑 manifest.json**
-
-在 `Packages/manifest.json` 的 `dependencies` 中添加：
-
-```json
-"com.ember.ecs": "https://github.com/NormanYUE/Ember-Framework.git"
-```
-
-> 依赖项包括：`com.unity.collections` 2.4.3+、`com.unity.mathematics` 1.3.2+
+> 依赖项：`com.unity.collections` 2.4.3+、`com.unity.mathematics` 1.3.2+
 
 ---
 
