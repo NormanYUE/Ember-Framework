@@ -2,6 +2,17 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.7-preview] — 结构变更异常安全
+
+### Fixed
+- **批处理预分配**：`AddComponentBatch`/`RemoveComponentBatch` 迁移实体前先确保所有目标 Chunk slot 存在，避免中途分配失败导致部分实体已迁移的不一致状态。
+
+### Added
+- **一致性反向校验**：`ValidateConsistency` 增加 Chunk→Record 回指验证，检测双重放置和过时 Record 的 EntityRecord→Archetype→Chunk 三方不一致。
+- **结构变更测试**：8 个单元测试覆盖一致性验证、批处理边界、守卫顺序。
+
+---
+
 ## [0.10.6-preview] — 崩溃防护补充
 
 ### Fixed
