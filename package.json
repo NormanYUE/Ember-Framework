@@ -4,8 +4,13 @@
   "displayName": "Ember ECS",
   "unity": "2022.3",
   "description": "High-performance archetype-based ECS framework for Unity. SOA chunk storage, parallel job scheduling with automatic dependency resolution, source-generated component registration, and zero-allocation hot paths.",
+  "license": "MIT",
+  "keywords": ["ecs", "archetype", "job-system", "dots"],
   "author": {
     "name": "Norman"
+  },
+  "repository": {
+    "url": "https://github.com/NormanYUE/ECS-Framework.git"
   },
   "dependencies": {
     "com.unity.collections": "2.4.3",
