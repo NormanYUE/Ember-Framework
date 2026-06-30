@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.8-preview] — ECB 健壮性
+
+### Fixed
+- **ECB Dispose 安全**：6 个公共方法添加 `ThrowIfDisposed()` 守卫，Dispose 后调用不再访问已释放 NativeList，改为 `ObjectDisposedException`。
+- **ECB SetComponent 实体校验**：回放 `SetComponent` 命令前检查实体存活状态，避免对已销毁实体的 hard crash。
+- **ECB 临时实体跨缓冲区分辨**：未解析的临时 ID 在 DEBUG 下 `LogWarning`，帮助诊断 ECB 间实体引用错误。
+
+---
+
 ## [0.10.7-preview] — 结构变更异常安全
 
 ### Fixed
