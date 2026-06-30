@@ -2,6 +2,18 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.6-preview] — 崩溃防护补充
+
+### Fixed
+- **遗漏的 ThrowIfDisposed 守卫**：`World.Exists`、5 个 BufferElement 方法、4 个 UNITY_EDITOR Buffer 内省方法添加守卫。
+- **Dispose 顺序**：`m_Disposed = true` 移至 finally 块，确保异常路径也正确标记。`DisposeEcsCore` 同样移入 finally。
+- **SystemTicker 入口保护**：`Tick()` 和 `TickSerialFlat()` 增加 `world.IsDisposed` 早期返回。
+
+### Changed
+- **DestroyEntity 内部拆分**：`DestroyEntity` 公开方法调用 `ThrowIfDisposed` 后委托给 `DestroyEntityInternal`，World.Dispose 中直接走内部路径避免重复检查。
+
+---
+
 ## [0.10.5-preview] — 崩溃防护加固
 
 ### Fixed
