@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.11-preview] — MCP 性能诊断
+
+### Added
+- **`perf_summary` MCP 命令**：一键性能诊断，采样 N 帧自动排名最慢系统，返回帧级耗时分解和 Top-N 慢系统。支持 `tickerIndex`/`sampleFrames`/`topN` 参数。
+- **轻量 PerfCollect**：`EmberEditorGuard.ForcePerfCollect` 标志，MCP 命令临时开启系统计时收集而不需打开 Debug 窗口。
+- **性能 Skill 更新**：`ember-perf-optimize` 诊断工作流加入 `perf_summary` 作为首选入口。
+
+---
+
 ## [0.10.10-preview] — 热路径性能修复
 
 ### Fixed

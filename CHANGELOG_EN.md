@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.11-preview] — MCP Performance Diagnostics
+
+### Added
+- **`perf_summary` MCP command**: One-click performance diagnostic. Samples N frames, auto-ranks slowest systems, returns frame-level timing breakdown with Top-N slow systems. Supports `tickerIndex`/`sampleFrames`/`topN` parameters.
+- **Lightweight PerfCollect**: `EmberEditorGuard.ForcePerfCollect` flag. MCP commands can temporarily enable system timing collection without opening debug windows.
+- **Perf skill update**: `ember-perf-optimize` diagnostic workflow now lists `perf_summary` as the primary entry point.
+
+---
+
 ## [0.10.10-preview] — Hot-Path Performance Fix
 
 ### Fixed
