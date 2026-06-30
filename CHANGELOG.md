@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.0-preview] — API 精简
+
+### Changed — Breaking
+- **System 重命名**：`SystemBase` → `SimpleSystem`，`DeclaredSystemBase` → `DeclaredSystem`。名称直观反映用途：SimpleSystem = 简单串行 + 全局 barrier，DeclaredSystem = 声明访问 + 参与依赖图。
+
+### Added
+- **`Chunk.At<T>(index)`**：直接按类型访问组件 ref，无需手算 compIndex。`chunk.At<Position>(i)` 替代 `chunk.Get<Position>(0).At(i)`。
+
+---
+
 ## [0.10.11-preview] — MCP 性能诊断
 
 ### Added
