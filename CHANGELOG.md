@@ -2,6 +2,13 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.10-preview] — 热路径性能修复
+
+### Fixed
+- **Tick 性能回归**：`ValidateConsistency()` 从 `Tick()` 热路径中移除（改为按需调用），消除每 Tick 的 O(N) 遍历和 `HashSet` 分配。
+
+---
+
 ## [0.10.9-preview] — 资源边界保护
 
 ### Added

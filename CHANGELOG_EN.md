@@ -2,6 +2,13 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.10-preview] — Hot-Path Performance Fix
+
+### Fixed
+- **Tick performance regression**: Removed `ValidateConsistency()` from hot `Tick()` path (now on-demand only), eliminating per-Tick O(N) traversal and `HashSet` allocation.
+
+---
+
 ## [0.10.9-preview] — Resource Boundary Protection
 
 ### Added
