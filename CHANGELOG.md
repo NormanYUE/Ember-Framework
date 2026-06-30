@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.9-preview] — 资源边界保护
+
+### Added
+- **实体上限**：`World.MaxEntities`（默认 1,000,000），`CreateEntity` 触达上限时抛出 `InvalidOperationException`，避免无限制创建导致 OOM。
+- **Chunk 上限**：`World.MaxTotalChunks`（默认 20,000），新 Chunk 分配时检查，保护 Native 内存不被耗尽。
+- **活跃实体计数**：`World.AliveEntityCount` 实时追踪当前 alive 实体数量。
+
+---
+
 ## [0.10.8-preview] — ECB 健壮性
 
 ### Fixed
