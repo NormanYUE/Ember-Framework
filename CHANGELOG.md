@@ -2,6 +2,17 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.4-preview] — 安装文档 + 发布流程改进
+
+### Added
+- **Unity 安装说明**：README 新增安装章节，包含 Package Manager git URL 和 manifest.json 两种方式
+
+### Changed
+- **双分支发布策略**：包仓库 master（生产） + develop（测试），默认发布到 develop
+- **包作者名称**：git 提交者名称统一为 Norman
+
+---
+
 ## [0.10.3-preview] — Chunk 池化 + GC 热路径消除
 
 ### Fixed
