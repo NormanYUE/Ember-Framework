@@ -2,6 +2,19 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.10.5-preview] — 崩溃防护加固
+
+### Fixed
+- **World Dispose 后操作崩溃**：32 个公共 API 入口添加 `ThrowIfDisposed()` 守卫，Dispose 后调用不再抛 `NullReferenceException`，改为明确的 `ObjectDisposedException`。
+- **Dispose 幂等**：重复调用 `World.Dispose()` 不再抛异常。
+
+### Added
+- **`World.IsDisposed`**：查询 World 是否已释放。
+- **内部一致性自检**：`World.ValidateConsistency()` 在 DEBUG 模式下自动校验 EntityRecord → Archetype → Chunk 三方一致性，提前发现内部状态损坏。
+- **崩溃场景测试**：24 个单元测试覆盖 Dispose 后 API 调用、无效 Entity、Batch null 参数等边界条件。
+
+---
+
 ## [0.10.4-preview] — 安装文档
 
 ### Added
