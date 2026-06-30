@@ -3,9 +3,9 @@
   "version": "0.10.4-preview",
   "displayName": "Ember ECS",
   "unity": "2022.3",
-  "description": "A powerful ECS framework",
+  "description": "High-performance archetype-based ECS framework for Unity. SOA chunk storage, parallel job scheduling with automatic dependency resolution, source-generated component registration, and zero-allocation hot paths.",
   "author": {
-    "name": "Norman YUE"
+    "name": "Norman"
   },
   "dependencies": {
     "com.unity.collections": "2.4.3",
