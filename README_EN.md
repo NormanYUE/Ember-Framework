@@ -1023,6 +1023,28 @@ SystemBase / SystemContext
 
 The MCP Server lets AI coding assistants (Claude Code, Codex, etc.) directly operate on a running ECS World via the standard [Model Context Protocol](https://modelcontextprotocol.io) — query entities, inspect Archetypes, modify components, all automated by AI without writing manual debug scripts.
 
+### MCP Intelligent Diagnostics
+
+Ember deeply integrates MCP, allowing AI agents to read and write the running Unity ECS world through 40+ `ember_execute` commands.
+
+**Three Diagnostic Capabilities:**
+
+| | |
+|---|---|
+| **🔍 Live Inspection** | `get_entity_full`, `query_entities_v2`, `get_archetypes` — see inside the runtime ECS world |
+| **📊 Performance Profiling** | `perf_summary` — one-click sampling with automatic slowest-system ranking; `system_status` — per-system avg/max Tick times |
+| **🛠️ Runtime Intervention** | `add_component`, `set_singleton`, `safe_write_batch` — modify runtime data without writing code |
+
+**Diagnostic in Action:**
+
+```
+User: "Help me analyze performance"
+```
+
+AI calls `perf_summary`, samples 10 frames, and produces a complete report in under a minute — system timing breakdown, parallel layer topology, Archetype fragmentation analysis, prioritized optimization recommendations with projected improvements. One `InteractionBuild` system consuming 91% of the frame budget prompts AI to suggest parallelizing Pack.Build and spatial-hashing Grid.Apply, projecting total tick reduction from 9.4ms to 3-5ms.
+
+No breakpoints, no log diving. One conversation for diagnosis + solution + verification.
+
 ### 14.1 Architecture Overview
 
 ```
