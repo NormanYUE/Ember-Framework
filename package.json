@@ -1,11 +1,16 @@
 {
   "name": "com.ember.ecs",
-  "version": "0.10.4-preview",
+  "version": "0.11.0-preview",
   "displayName": "Ember ECS",
   "unity": "2022.3",
-  "description": "High-performance archetype-based ECS framework for Unity. SOA chunk storage, parallel job scheduling with automatic dependency resolution, source-generated component registration, and zero-allocation hot paths.",
+  "description": "High-performance archetype-based ECS framework for Unity. SOA chunk storage, parallel job scheduling with automatic dependency resolution, source-generated component registration, zero-allocation hot paths, and integrated MCP diagnostics for AI-assisted debugging and profiling.",
+  "license": "MIT",
+  "keywords": ["ecs", "archetype", "job-system", "dots", "mcp", "ai-diagnostics"],
   "author": {
     "name": "Norman"
+  },
+  "repository": {
+    "url": "https://github.com/NormanYUE/ECS-Framework.git"
   },
   "dependencies": {
     "com.unity.collections": "2.4.3",

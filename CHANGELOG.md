@@ -2,6 +2,86 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.0-preview] — API 精简
+
+### Changed — Breaking
+- **System 重命名**：`SystemBase` → `SimpleSystem`，`DeclaredSystemBase` → `DeclaredSystem`。名称直观反映用途：SimpleSystem = 简单串行 + 全局 barrier，DeclaredSystem = 声明访问 + 参与依赖图。
+
+### Added
+- **`Chunk.At<T>(index)`**：直接按类型访问组件 ref，无需手算 compIndex。`chunk.At<Position>(i)` 替代 `chunk.Get<Position>(0).At(i)`。
+
+---
+
+## [0.10.11-preview] — MCP 性能诊断
+
+### Added
+- **`perf_summary` MCP 命令**：一键性能诊断，采样 N 帧自动排名最慢系统，返回帧级耗时分解和 Top-N 慢系统。支持 `tickerIndex`/`sampleFrames`/`topN` 参数。
+- **轻量 PerfCollect**：`EmberEditorGuard.ForcePerfCollect` 标志，MCP 命令临时开启系统计时收集而不需打开 Debug 窗口。
+- **性能 Skill 更新**：`ember-perf-optimize` 诊断工作流加入 `perf_summary` 作为首选入口。
+
+---
+
+## [0.10.10-preview] — 热路径性能修复
+
+### Fixed
+- **Tick 性能回归**：`ValidateConsistency()` 从 `Tick()` 热路径中移除（改为按需调用），消除每 Tick 的 O(N) 遍历和 `HashSet` 分配。
+
+---
+
+## [0.10.9-preview] — 资源边界保护
+
+### Added
+- **实体上限**：`World.MaxEntities`（默认 1,000,000），`CreateEntity` 触达上限时抛出 `InvalidOperationException`，避免无限制创建导致 OOM。
+- **Chunk 上限**：`World.MaxTotalChunks`（默认 20,000），新 Chunk 分配时检查，保护 Native 内存不被耗尽。
+- **活跃实体计数**：`World.AliveEntityCount` 实时追踪当前 alive 实体数量。
+
+---
+
+## [0.10.8-preview] — ECB 健壮性
+
+### Fixed
+- **ECB Dispose 安全**：6 个公共方法添加 `ThrowIfDisposed()` 守卫，Dispose 后调用不再访问已释放 NativeList，改为 `ObjectDisposedException`。
+- **ECB SetComponent 实体校验**：回放 `SetComponent` 命令前检查实体存活状态，避免对已销毁实体的 hard crash。
+- **ECB 临时实体跨缓冲区分辨**：未解析的临时 ID 在 DEBUG 下 `LogWarning`，帮助诊断 ECB 间实体引用错误。
+
+---
+
+## [0.10.7-preview] — 结构变更异常安全
+
+### Fixed
+- **批处理预分配**：`AddComponentBatch`/`RemoveComponentBatch` 迁移实体前先确保所有目标 Chunk slot 存在，避免中途分配失败导致部分实体已迁移的不一致状态。
+
+### Added
+- **一致性反向校验**：`ValidateConsistency` 增加 Chunk→Record 回指验证，检测双重放置和过时 Record 的 EntityRecord→Archetype→Chunk 三方不一致。
+- **结构变更测试**：8 个单元测试覆盖一致性验证、批处理边界、守卫顺序。
+
+---
+
+## [0.10.6-preview] — 崩溃防护补充
+
+### Fixed
+- **遗漏的 ThrowIfDisposed 守卫**：`World.Exists`、5 个 BufferElement 方法、4 个 UNITY_EDITOR Buffer 内省方法添加守卫。
+- **Dispose 顺序**：`m_Disposed = true` 移至 finally 块，确保异常路径也正确标记。`DisposeEcsCore` 同样移入 finally。
+- **SystemTicker 入口保护**：`Tick()` 和 `TickSerialFlat()` 增加 `world.IsDisposed` 早期返回。
+
+### Changed
+- **DestroyEntity 内部拆分**：`DestroyEntity` 公开方法调用 `ThrowIfDisposed` 后委托给 `DestroyEntityInternal`，World.Dispose 中直接走内部路径避免重复检查。
+
+---
+
+## [0.10.5-preview] — 崩溃防护加固
+
+### Fixed
+- **World Dispose 后操作崩溃**：32 个公共 API 入口添加 `ThrowIfDisposed()` 守卫，Dispose 后调用不再抛 `NullReferenceException`，改为明确的 `ObjectDisposedException`。
+- **Dispose 幂等**：重复调用 `World.Dispose()` 不再抛异常。
+
+### Added
+- **`World.IsDisposed`**：查询 World 是否已释放。
+- **内部一致性自检**：`World.ValidateConsistency()` 在 DEBUG 模式下自动校验 EntityRecord → Archetype → Chunk 三方一致性，提前发现内部状态损坏。
+- **崩溃场景测试**：24 个单元测试覆盖 Dispose 后 API 调用、无效 Entity、Batch null 参数等边界条件。
+
+---
+
 ## [0.10.4-preview] — 安装文档
 
 ### Added
