@@ -2,6 +2,13 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.2-preview] — Symmetric Hierarchy Cleanup
+
+### Fixed
+- **Child destroy orphan**: `DestroyEntity(child)` now removes the child reference from its parent's `ChildEntity` buffer, eliminating dangling entries.
+
+---
+
 ## [0.11.1-preview] — Entity Templates + Hierarchy
 
 ### Added

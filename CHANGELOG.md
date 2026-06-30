@@ -2,6 +2,13 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.2-preview] — 层次结构对称清理
+
+### Fixed
+- **销毁子实体残留**：`DestroyEntity(child)` 时自动从父实体的 `ChildEntity` buffer 中移除引用，不再残留已删除实体的孤儿条目。
+
+---
+
 ## [0.11.1-preview] — 实体模板 + 层次结构
 
 ### Added
