@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.1-preview] — Entity Templates + Hierarchy
+
+### Added
+- **Entity templates**: `EntityTemplate` with `Add<T>(value)`, `AddTag<T>()`, `AddChild(tag, template)`. Register and instantiate with `world.Instantiate(name)` to create entities with their child hierarchy in one call.
+- **Parent-child hierarchy**: `ParentComponent` + `ChildEntity : IBufferElement` for bidirectional references. `GetChildren`/`GetParent`/`RemoveChild` APIs.
+- **Cascade destroy**: `DestroyEntity` recursively destroys all child entities.
+- **Orphan detection**: `ValidateConsistency` detects `ParentComponent` pointing to non-existent entities in DEBUG mode.
+
+---
+
 ## [0.11.0-preview] — API Simplification
 
 ### Changed — Breaking

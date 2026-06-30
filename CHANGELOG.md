@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.1-preview] — 实体模板 + 层次结构
+
+### Added
+- **实体模板**：`EntityTemplate` 支持 `Add<T>(value)`、`AddTag<T>()`、`AddChild(tag, template)`，注册后通过 `world.Instantiate(name)` 一键创建实体及其子层级。
+- **父子层次**：`ParentComponent` + `ChildEntity : IBufferElement` 建立双向引用。`GetChildren`/`GetParent`/`RemoveChild` API。
+- **级联销毁**：`DestroyEntity` 时递归销毁所有子实体。
+- **孤儿检测**：`ValidateConsistency` 在 DEBUG 下检测 `ParentComponent` 指向不存在的实体。
+
+---
+
 ## [0.11.0-preview] — API 精简
 
 ### Changed — Breaking
