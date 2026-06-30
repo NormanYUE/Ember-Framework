@@ -480,23 +480,23 @@ EcsSystem（共享生命周期）
 
 ## 5. 查询（Query）
 
-系统内查询通过 `SystemContext.QueryChunks()` 或 `EcsAPI.Query()` 两种方式：
+Ember 提供以下查询入口，按场景选择：
 
-**构造 EntityQuery**——推荐使用静态工厂 `EntityQuery.With<T>()`：
+| 场景 | 入口 | 说明 |
+|------|------|------|
+| **系统内遍历** | `ctx.QueryChunks<A, B>()` | 首选，每帧使用 |
+| **系统外一次性查询** | `EcsAPI.Query(world).Read<A>().AsRows()` | 初始化或一次性操作 |
+| **缓存查询对象** | `new EntityQuery(mask)` → `world.GetChunks()` | 跨 Tick 复用以避免每次重建查询 |
+
+**构造 EntityQuery**——使用 `EntityQuery.With<T>()` 链式 builder：
 
 ```csharp
-// 推荐（链式 builder，0GC）：
 var query = EntityQuery.With<Health, Position>().None<DeadTag>().Build();
-
-// 等价传统写法：
-var query = new EntityQuery(
-    all: new ComponentMask().With<Health>().With<Position>(),
-    none: new ComponentMask().With<DeadTag>());
 ```
 
 `EntityQueryBuilder` 是 struct，按值传递无分配。
 
-### 5.1 外部查询（QueryBuilder）
+### 5.1 外部查询（QueryBuilder + EcsAPI）
 
 在系统外部或自定义逻辑中使用 `EcsAPI.Query()`：
 

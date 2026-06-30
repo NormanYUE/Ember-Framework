@@ -480,23 +480,23 @@ EcsSystem (shared lifecycle)
 
 ## 5. Queries
 
-Intra-system queries use either `SystemContext.QueryChunks()` or `EcsAPI.Query()`:
+Ember provides the following query entry points — choose by context:
 
-**Constructing an EntityQuery** — prefer the static factory `EntityQuery.With<T>()`:
+| Context | Entry Point | Notes |
+|---------|-------------|-------|
+| **Inside a System** | `ctx.QueryChunks<A, B>()` | Primary choice, used every frame |
+| **Outside Systems (one-shot)** | `EcsAPI.Query(world).Read<A>().AsRows()` | Initialization or ad-hoc queries |
+| **Cached query object** | `new EntityQuery(mask)` → `world.GetChunks()` | Reuse across Ticks to avoid rebuilding |
+
+**Constructing an EntityQuery** — use the `EntityQuery.With<T>()` chainable builder:
 
 ```csharp
-// Recommended (chainable builder, 0GC):
 var query = EntityQuery.With<Health, Position>().None<DeadTag>().Build();
-
-// Equivalent traditional approach:
-var query = new EntityQuery(
-    all: new ComponentMask().With<Health>().With<Position>(),
-    none: new ComponentMask().With<DeadTag>());
 ```
 
 `EntityQueryBuilder` is a struct — pass by value with no allocation.
 
-### 5.1 External Queries (QueryBuilder)
+### 5.1 External Queries (QueryBuilder + EcsAPI)
 
 Use `EcsAPI.Query()` outside of systems or in custom logic:
 
