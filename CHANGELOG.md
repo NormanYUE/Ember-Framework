@@ -2,21 +2,6 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.12.0-preview] — MCP 架构迁移
-
-### Changed
-- **MCP 桥接层**：废弃自建 TCP bridge + stdio server，迁移到开源 `com.coplaydev.unity-mcp`（MIT），使用 `[McpForUnityTool]` 自定义工具系统
-- **工具组织**：42 个 Ember 命令拆分为 43 个独立 MCP 工具，按 `ember_read`（21）/`ember_write`（14）/`ember_diag`（8）分组
-
-### Removed
-- **Ember.Mcp.Server**：整个 `src/Ember.Mcp/` 项目 + `Editor/EmberBridge.cs` + `Editor/EmberBridgeCommands.cs`（5660 行）归档到 `archived/ember-mcp/`
-- **包产出**：`Tools~/Ember.Mcp.Server.dll` 从包中移除，不再部署
-
-### Added
-- **com.coplaydev.unity-mcp 依赖**：版本 10.0.0，通过 OpenUPM / git URL 安装
-
----
-
 ## [0.11.4-preview] — Newtonsoft.Json 迁移
 
 ### Changed
