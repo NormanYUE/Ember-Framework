@@ -1031,7 +1031,7 @@ Ember deeply integrates MCP, allowing AI agents to read and write the running Un
 
 | | |
 |---|---|
-| **🔍 Live Inspection** | `get_entity_full`, `query_entities_v2`, `get_archetypes` — see inside the runtime ECS world |
+| **🔍 Live Inspection** | `get_entity_full`, `query_entities`, `get_archetypes` — see inside the runtime ECS world |
 | **📊 Performance Profiling** | `perf_summary` — one-click sampling with automatic slowest-system ranking; `system_status` — per-system avg/max Tick times |
 | **🛠️ Runtime Intervention** | `add_component`, `set_singleton`, `safe_write_batch` — modify runtime data without writing code |
 
@@ -1113,21 +1113,21 @@ You can also edit the configuration file manually. Example for Claude Code:
 | `--port <n>` | Manually specify a port. Usually unnecessary; use only when the status file is unavailable and the port is known |
 | `--allow-write` | Legacy compatibility flag. It no longer controls permissions; writes are guarded by Unity-side Play Mode and command type checks |
 
-### 14.3 Command Reference (41 commands via `ember_execute`)
+### 14.3 Command Reference (43 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
-**Read (12):** world_info, query_entities, query_entities_v2, get_entity, get_entity_full, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_singletons, get_buffer_elements, entity_counts
+**Read (12):** world_info, query_entities, get_entity, get_entity_full, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_singletons, get_buffer_elements, entity_counts
 **Write (6):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (8):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities
+**Diagnostic (10):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report
 **System (4):** system_status, get_system_info, get_dependency_graph, advance_frame
 **Entity (2):** trace_entity, query_archetypes
 **Write Safety (1):** safe_write_batch
 **World (1):** list_worlds
 
-Example: `{"op": "query_entities_v2", "all": ["Position"], "limit": 10}`
+Example: `{"op": "query_entities", "all": ["Position"], "limit": 10}`
 Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSystem"}`
 
 ### 14.4 Usage Examples
@@ -1135,7 +1135,7 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 A typical interaction flow in an AI client:
 
 > **User**: Query all entities with a Health component and find low-health ones
-> **AI** calls `ember_query_entities(components=["Health"])`
+> **AI** calls `ember_execute({"op":"query_entities","all":["Health"]})`
 > → Returns 3 entities: Entity #1 Health.Current = 80, Entity #2 Health.Current = 5
 >
 > **User**: Entity #2 is nearly dead, show its details
