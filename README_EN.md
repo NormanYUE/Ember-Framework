@@ -1058,9 +1058,9 @@ AI Client            MCP Server           Unity Editor
     │◀── JSON-RPC stdio ──│                     │
 ```
 
-- **EmberBridge**: A TCP server inside the Unity Editor that automatically scans ports 9090-9099 for an available one, dispatches requests to the main thread for execution, and returns results over TCP
-- **MCP Server** (`Ember.Mcp.Server.dll`): A standalone .NET console application serving as the standard MCP protocol adaptation layer between the AI client and Unity. Reads the port number from `~/.ember/instance.json` at startup and communicates with the AI client over stdio
-- **Security model**: Read-only by default — AI can query the World but cannot modify it. To enable write operations, explicitly launch the MCP Server with the `--allow-write` flag
+- **EmberBridge**: A TCP server inside the Unity Editor that automatically scans ports 9090-9099 for an available one, dispatches requests to the main thread for execution, and returns results over TCP. The Bridge writes `~/.ember/ember-status-{projectHash}.json` with the current port, project root, `ready/reloading/port_busy` state, and heartbeat timestamp
+- **MCP Server** (`Ember.Mcp.Server.dll`): A standalone .NET console application serving as the standard MCP protocol adaptation layer between the AI client and Unity. Before every `ember_execute` call, it rereads the project status file from `--project-root` and ensures the Bridge is connected; Unity reloads, port changes, and initially disconnected sessions recover automatically
+- **Security model**: Write access is enforced on the Unity side by command type and Play Mode state. Read operations can run in Edit Mode; creating/destroying entities, adding/removing components, and writing components require Play Mode.
 
 ### 14.2 Installation and Configuration
 
@@ -1094,7 +1094,12 @@ You can also edit the configuration file manually. Example for Claude Code:
   "mcpServers": {
     "ember": {
       "command": "dotnet",
-      "args": ["exec", "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll", "--allow-write"]
+      "args": [
+        "exec",
+        "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll",
+        "--project-root",
+        "/path/to/UnityProject"
+      ]
     }
   }
 }
@@ -1104,8 +1109,9 @@ You can also edit the configuration file manually. Example for Claude Code:
 
 | Argument | Description |
 |----------|-------------|
-| `--allow-write` | Enable write tools (default: read-only) |
-| `--port <n>` | Manually specify a port (usually not needed — MCP Server reads from `instance.json` automatically) |
+| `--project-root <path>` | Unity project root. Recommended: the MCP Server uses it to read the matching project status file and avoid connecting to another Unity project |
+| `--port <n>` | Manually specify a port. Usually unnecessary; use only when the status file is unavailable and the port is known |
+| `--allow-write` | Legacy compatibility flag. It no longer controls permissions; writes are guarded by Unity-side Play Mode and command type checks |
 
 ### 14.3 Command Reference (41 commands via `ember_execute`)
 
@@ -1148,13 +1154,14 @@ A typical interaction flow in an AI client:
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| "Not connected to Unity" | Bridge not started or Unity not running | `Window > Ember > MCP` → Start |
-| "Write operations are disabled" | `--allow-write` not enabled | Add `--allow-write` to configuration and restart client |
+| "No fresh Ember bridge status was found" | Bridge not started, status file stale, or `--project-root` points to the wrong project | `Window > Ember > MCP` → Start, and confirm `--project-root` is the Unity project root |
+| "Unity bridge is reloading" | Unity is switching Play Mode or doing a domain reload | Wait until the Bridge returns to `ready`; the MCP Server reconnects automatically |
 | "Write operations require Play Mode" | Write operations must be in Play Mode | Enter Play Mode |
-| Client hangs / unresponsive after launch | Port conflict | Adjust port range in Settings, or use `--port` manually |
+| Client hangs / unresponsive after launch | Port conflict or stale connection | The Bridge retries the last successful port first, then 9090-9099; restart the Ember MCP window if needed |
 | Configuration broken after package update | Tools~ path hash changed | Window `AutoUpdateConfigPaths()` auto-repairs; reopen the `Ember MCP` window |
 
 #### Log Diagnostics
 
 - **Unity Console**: Filter by `[Ember MCP]` prefix to view Bridge startup status, client connect/disconnect events, request method names, and truncated JSON content
 - **Ember MCP Window → Request Log**: Real-time display of the most recent 100 requests showing method name, response time (ms), and result preview
+- **`mcp_status` command**: Returns `running/state/reason/reloading/statusFile/statusSeq/clientCount`, useful for distinguishing Bridge stopped, Unity reloading, port busy, and no-client states

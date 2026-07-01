@@ -2,6 +2,22 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.3-preview] — MCP 连接可靠性
+
+### Fixed
+- **MCP 自动重连**：MCP Server 不再只在启动时固定连接一次端口。`ember_execute` 调用前会按当前项目状态文件重新解析端口并确保连接，覆盖 Unity reload、端口变化和初始未连接场景。
+- **Reload 状态等待**：Unity Play Mode/domain reload 期间写入 `reloading` 状态，MCP Server 不会绕过状态文件误连旧监听，等待 Bridge 恢复到 `ready` 后再连接。
+
+### Added
+- **Bridge v2 状态文件**：`~/.ember/ember-status-{projectHash}.json` 记录 `ready/starting/reloading/port_busy`、`seq`、`lastHeartbeatUnixMs`、协议版本和包版本，方便 Agent 精确诊断连接状态。
+- **MCP 连接回归测试**：新增独立 `tests/Mcp` 测试项目，覆盖 status 解析、reloading 等待、首次调用自动连接、断线后下一次调用重连且不重放失败请求。
+
+### Changed
+- **端口发现策略**：Unity Bridge 记录上次成功端口并优先复用；失败时再扫描 9090-9099。MCP Server 支持 per-project status、显式 `--project-root` 和端口扫描兜底。
+- **发布稳定性**：MCP Server 禁用 apphost 生成，避免 macOS apphost code signing 问题；引用 Ember 时关闭 profiling，避免普通 .NET 环境触发 Unity Profiler ECall。
+
+---
+
 ## [0.11.2-preview] — 层次结构对称清理
 
 ### Fixed

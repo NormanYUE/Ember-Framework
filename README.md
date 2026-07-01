@@ -1056,9 +1056,9 @@ AI Client            MCP Server           Unity Editor
     │◀── JSON-RPC stdio ──│                     │
 ```
 
-- **EmberBridge**：Unity Editor 内的 TCP 服务器，在 9090-9099 范围内自动扫描可用端口，将请求分派到主线程执行，结果通过 TCP 返回
-- **MCP Server**（`Ember.Mcp.Server.dll`）：独立的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。启动时从 `~/.ember/instance.json` 读取端口号，通过 stdio 与 AI 客户端通信
-- **安全模型**：默认只读——AI 可以查询 World 但不能修改。需要写操作时，必须显式添加 `--allow-write` 参数启动 MCP Server
+- **EmberBridge**：Unity Editor 内的 TCP 服务器，在 9090-9099 范围内自动扫描可用端口，将请求分派到主线程执行，结果通过 TCP 返回。Bridge 会写入 `~/.ember/ember-status-{projectHash}.json`，记录当前端口、项目根目录、`ready/reloading/port_busy` 状态和心跳时间
+- **MCP Server**（`Ember.Mcp.Server.dll`）：独立的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。每次 `ember_execute` 前都会按 `--project-root` 重新读取状态文件并确保连接；Unity reload、端口变化或首次未连接时会自动恢复
+- **安全模型**：写操作由 Unity 端按命令类型和 Play Mode 状态控制。读操作可在 Edit Mode 执行；创建/销毁实体、增删组件、写组件等写操作必须在 Play Mode 下执行
 
 ### 14.2 安装与配置
 
@@ -1092,7 +1092,12 @@ AI Client            MCP Server           Unity Editor
   "mcpServers": {
     "ember": {
       "command": "dotnet",
-      "args": ["exec", "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll", "--allow-write"]
+      "args": [
+        "exec",
+        "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll",
+        "--project-root",
+        "/path/to/UnityProject"
+      ]
     }
   }
 }
@@ -1102,8 +1107,9 @@ AI Client            MCP Server           Unity Editor
 
 | 参数 | 说明 |
 |------|------|
-| `--allow-write` | 启用写工具（默认只读） |
-| `--port <n>` | 手动指定端口（通常不需要，MCP Server 会从 `instance.json` 自动读取） |
+| `--project-root <path>` | 指定 Unity 项目根目录。推荐配置，MCP Server 用它读取对应项目的状态文件并避免连到其他 Unity 项目 |
+| `--port <n>` | 手动指定端口。通常不需要；只有在状态文件不可用且明确知道端口时使用 |
+| `--allow-write` | 旧参数，保留兼容但已不再控制权限。写操作由 Unity 端 Play Mode 和命令类型判断 |
 
 ### 14.3 Command Reference (41 commands via `ember_execute`)
 
@@ -1146,13 +1152,14 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 
 | 问题 | 原因 | 解决 |
 |------|------|------|
-| "Not connected to Unity" | Bridge 未启动或 Unity 未运行 | `Window > Ember > MCP` → Start |
-| "Write operations are disabled" | 未启用 `--allow-write` | 在配置中添加 `--allow-write` 后重启客户端 |
+| "No fresh Ember bridge status was found" | Bridge 未启动、状态文件过期，或 `--project-root` 指向了错误项目 | `Window > Ember > MCP` → Start，并确认配置里的 `--project-root` 是 Unity 项目根目录 |
+| "Unity bridge is reloading" | Unity 正在切换 Play Mode 或 domain reload | 等待 Bridge 恢复到 `ready` 后重试；MCP Server 会自动重连 |
 | "Write operations require Play Mode" | 写操作必须在 Play Mode 执行 | 进入 Play Mode |
-| 客户端启动后卡住 / 无响应 | 端口冲突 | Settings 中调整端口范围，或手动 `--port` |
+| 客户端启动后卡住 / 无响应 | 端口冲突或旧连接残留 | Bridge 会优先复用上次端口并在 9090-9099 内重试；必要时重启 Ember MCP 窗口 |
 | 包更新后配置失效 | Tools~ 路径中的 hash 变化 | 窗口 `AutoUpdateConfigPaths()` 自动修复，重启 `Ember MCP` 窗口即可 |
 
 #### 日志诊断
 
 - **Unity Console**：过滤 `[Ember MCP]` 前缀，可查看 Bridge 启动状态、客户端连接/断开、请求方法名和截断的 JSON 内容
 - **Ember MCP 窗口 → Request Log**：实时显示最近 100 条请求的方法名、响应耗时（ms）和结果预览
+- **`mcp_status` 命令**：返回 `running/state/reason/reloading/statusFile/statusSeq/clientCount`，用于区分 Bridge 未启动、Unity reloading、端口占用和客户端未连接等状态

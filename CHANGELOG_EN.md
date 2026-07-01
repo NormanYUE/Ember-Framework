@@ -2,6 +2,22 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.3-preview] — MCP Connection Reliability
+
+### Fixed
+- **MCP auto-reconnect**: The MCP Server no longer binds itself to a single port only at startup. Before each `ember_execute` call it resolves the current project status file and ensures the bridge is connected, covering Unity reloads, port changes, and initially disconnected sessions.
+- **Reload-state waiting**: During Unity Play Mode/domain reload, the Bridge writes a `reloading` state. The MCP Server respects that state instead of bypassing it with port scanning, then reconnects after the Bridge returns to `ready`.
+
+### Added
+- **Bridge v2 status file**: `~/.ember/ember-status-{projectHash}.json` records `ready/starting/reloading/port_busy`, `seq`, `lastHeartbeatUnixMs`, protocol version, and package version so agents can diagnose connection state precisely.
+- **MCP connection regression tests**: Added a standalone `tests/Mcp` test project covering status parsing, reloading waits, first-call auto-connect, and reconnect-on-next-call without replaying the failed request.
+
+### Changed
+- **Port discovery strategy**: The Unity Bridge records the last successful port and tries it first, then falls back to scanning 9090-9099. The MCP Server supports per-project status, explicit `--project-root`, and scan fallback.
+- **Release stability**: The MCP Server disables apphost generation to avoid macOS apphost code-signing failures, and references Ember with profiling disabled to avoid Unity Profiler ECalls in plain .NET environments.
+
+---
+
 ## [0.11.2-preview] — Symmetric Hierarchy Cleanup
 
 ### Fixed
