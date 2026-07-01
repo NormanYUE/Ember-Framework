@@ -2,6 +2,17 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.11.4-preview] — Newtonsoft.Json Migration
+
+### Changed
+- **MCP JSON engine**: Migrated MCP Server from `System.Text.Json` to `Newtonsoft.Json` (Unity built-in package `com.unity.nuget.newtonsoft-json@3.2.1`), eliminating hand-written JSON field parsing code.
+- **package.json**: Added `com.unity.nuget.newtonsoft-json` dependency so users get automatic resolution on package install.
+
+### Removed
+- **TcpBridge manual parsing**: Removed `ParseHandshakeManually`, `ExtractJsonField`, `ExtractJsonInt`, `ExtractJsonBool` methods (~45 lines). Newtonsoft's lenient parsing handles all fallback scenarios previously covered by these.
+
+---
+
 ## [0.11.3-preview] — MCP Connection Reliability
 
 ### Fixed
