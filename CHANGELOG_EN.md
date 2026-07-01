@@ -2,6 +2,21 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.0-preview] — MCP Architecture Migration
+
+### Changed
+- **MCP bridge layer**: Deprecated the custom TCP bridge + stdio server, migrated to the open-source `com.coplaydev.unity-mcp` (MIT), using the `[McpForUnityTool]` custom tool system
+- **Tool organization**: 42 Ember commands split into 43 independent MCP tools, grouped by `ember_read` (21) / `ember_write` (14) / `ember_diag` (8)
+
+### Removed
+- **Ember.Mcp.Server**: The entire `src/Ember.Mcp/` project + `Editor/EmberBridge.cs` + `Editor/EmberBridgeCommands.cs` (5,660 lines) archived to `archived/ember-mcp/`
+- **Package artifact**: `Tools~/Ember.Mcp.Server.dll` removed from the package, no longer deployed
+
+### Added
+- **com.coplaydev.unity-mcp dependency**: Version 10.0.0, installed via OpenUPM / git URL
+
+---
+
 ## [0.11.4-preview] — Newtonsoft.Json Migration
 
 ### Changed
