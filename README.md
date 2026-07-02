@@ -1023,7 +1023,7 @@ MCP Server 让 AI 编码助手（Claude Code、Codex 等）通过标准 [Model C
 
 ### MCP 智能诊断
 
-Ember 深度集成了 MCP，让 AI Agent 能通过 40+ 个 `ember_execute` 命令直接读写运行中的 Unity ECS 世界。
+Ember 深度集成了 MCP，让 AI Agent 能通过 50+ 个 `ember_execute` 命令直接读写运行中的 Unity ECS 世界。
 
 **三大诊断能力：**
 
@@ -1111,16 +1111,17 @@ AI Client            MCP Server           Unity Editor
 | `--port <n>` | 手动指定端口。通常不需要；只有在状态文件不可用且明确知道端口时使用 |
 | `--allow-write` | 旧参数，保留兼容但已不再控制权限。写操作由 Unity 端 Play Mode 和命令类型判断 |
 
-### 14.3 Command Reference (43 commands via `ember_execute`)
+### 14.3 Command Reference (54 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
-**Read (12):** world_info, query_entities, get_entity, get_entity_full, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_singletons, get_buffer_elements, entity_counts
-**Write (6):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton
+**Read (15):** world_info, query_entities, get_entity, get_entity_full, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_singletons, get_buffer_elements, entity_counts, read_console, get_scene_info, get_gameobject_info
+**Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (10):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report
+**Diagnostic (11):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy
 **System (4):** system_status, get_system_info, get_dependency_graph, advance_frame
+**Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
 **Write Safety (1):** safe_write_batch
 **World (1):** list_worlds

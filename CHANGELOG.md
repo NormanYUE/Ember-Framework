@@ -2,7 +2,25 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.11.4-preview] — Newtonsoft.Json 迁移
+## [0.12.0-preview] — MCP 命令全量覆盖 + Editor 控制
+
+### Added
+- **MCP 命令全量覆盖**：从 26 个命令扩展到 54 个，覆盖 Read (15)、Write (9)、Buffer (6)、Diag (8)、System (4)、Editor Control (4)、Hierarchy (4)。AI Agent 可通过 `ember_execute` 执行几乎所有 ECS 和 Editor 操作。
+- **Editor 控制命令**：`playmode_control`（进入/退出 Play Mode）、`set_time_scale`、`reload_scene`、`reload_domain`，AI Agent 可控制 Unity Editor 运行状态。
+- **层次结构命令**：`create_child_entity`、`attach_child`、`detach_child`、`get_hierarchy`，通过 MCP 管理父子实体关系。
+- **场景内省命令**：`get_scene_info`、`get_gameobject_info`、`read_console`，提供 Unity 场景层级和控制台日志访问。
+- **SimpleJson.GetRawValue**：提取字段原始 JSON 文本，支持嵌套对象和数组的完整保留。
+- **ConvertValue 类型扩展**：枚举类型、自定义 struct 的自动解析，新增 uint/short/ushort/byte/sbyte/ulong 类型支持。
+
+### Fixed
+- **Buffer 元素序列化**：`get_buffer` 输出改为 `JsonValue(elem)` 序列化，生成有效 JSON 替代 `ToString()` 可能的非法输出。
+- **EmberSafeWriteBatchTool apply 模式**：apply 模式现在正确执行所有操作，而非仅验证。
+- **数值解析区域设置**：所有数字解析统一使用 `CultureInfo.InvariantCulture`，修复非英语系统上的解析失败。
+- **Editor 控制命令权限**：`playmode_control` 等命令不再要求 Play Mode 前置条件。
+- **query_entities_v2 重命名**：旧名称 `query_entities_v2` 统一为 `query_entities`。
+
+### Changed
+- **MCP 架构**：从自研 MCP Server 迁移回 self-hosted 方案，保留完整源码控制和调试能力。
 
 ### Changed
 - **MCP JSON 引擎**：MCP Server 从 `System.Text.Json` 迁移到 `Newtonsoft.Json`（Unity 内置包 `com.unity.nuget.newtonsoft-json@3.2.1`），消除手写 JSON 字段解析代码。
