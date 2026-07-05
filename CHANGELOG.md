@@ -2,7 +2,7 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.12.1-preview] — Source Generator 兼容性修复
+## [0.12.1] — Source Generator 兼容性修复
 
 ### Fixed
 - **生成代码命名空间限定**：ComponentPack adapter 和 chunk meta 生成代码使用 `global::Ember` 限定核心类型，避免用户工程存在同名类型时解析到错误符号。

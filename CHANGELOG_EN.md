@@ -2,7 +2,7 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.12.1-preview] — Source Generator Compatibility Fixes
+## [0.12.1] — Source Generator Compatibility Fixes
 
 ### Fixed
 - **Generated code namespace qualification**: ComponentPack adapter and chunk meta generated code now uses `global::Ember` for core types, avoiding resolution to user-defined same-name symbols.
