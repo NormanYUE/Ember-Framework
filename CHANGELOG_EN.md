@@ -2,6 +2,78 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.1] — Source Generator Compatibility Fixes
+
+### Fixed
+- **Generated code namespace qualification**: ComponentPack adapter and chunk meta generated code now uses `global::Ember` for core types, avoiding resolution to user-defined same-name symbols.
+- **Abstract/generic JobSystem skip**: The chunk meta generator no longer emits wrappers for abstract or open generic JobSystem types, avoiding invalid generated output.
+- **Registry sealed idempotency**: `ComponentTypeRegistry` now allows already registered types to return their existing id after sealing, avoiding false new-registration errors when generated registrars are scanned again.
+
+### Perf
+- **ChunkJobMeta accessor inlining**: Generated chunk wrappers inline offset/stride access logic directly, reducing generic helper calls on hot paths.
+
+## [0.12.0-preview] — Full MCP Command Coverage + Editor Control
+
+### Added
+- **Full MCP command coverage**: Expanded from 26 to 54 commands covering Read (15), Write (9), Buffer (6), Diag (8), System (4), Editor Control (4), Hierarchy (4). AI agents can perform nearly all ECS and Editor operations via `ember_execute`.
+- **Editor control commands**: `playmode_control` (enter/exit Play Mode), `set_time_scale`, `reload_scene`, `reload_domain` — AI agents can control Unity Editor runtime state.
+- **Hierarchy commands**: `create_child_entity`, `attach_child`, `detach_child`, `get_hierarchy` — manage parent-child entity relationships via MCP.
+- **Scene introspection commands**: `get_scene_info`, `get_gameobject_info`, `read_console` — access Unity scene hierarchy and console logs.
+- **SimpleJson.GetRawValue**: Extract field values as raw JSON text, preserving nested objects and arrays intact.
+- **ConvertValue type extensions**: Enum type and custom struct auto-parsing, added uint/short/ushort/byte/sbyte/ulong type support.
+
+### Fixed
+- **Buffer element serialization**: `get_buffer` output now uses `JsonValue(elem)` serialization for valid JSON instead of `ToString()` which could produce invalid output.
+- **EmberSafeWriteBatchTool apply mode**: Apply mode now correctly executes all operations instead of only validating.
+- **Numeric parsing locale issue**: All numeric parsing unified to use `CultureInfo.InvariantCulture`, fixing failures on non-English systems.
+- **Editor control command permissions**: `playmode_control` and similar commands no longer require Play Mode as a precondition.
+- **query_entities_v2 rename**: Legacy name `query_entities_v2` unified to `query_entities`.
+
+### Changed
+- **MCP architecture**: Migrated from external MCP Server back to self-hosted approach, retaining full source control and debugging capability.
+
+### Changed
+- **MCP JSON engine**: Migrated MCP Server from `System.Text.Json` to `Newtonsoft.Json` (Unity built-in package `com.unity.nuget.newtonsoft-json@3.2.1`), eliminating hand-written JSON field parsing code.
+- **package.json**: Added `com.unity.nuget.newtonsoft-json` dependency so users get automatic resolution on package install.
+
+### Removed
+- **TcpBridge manual parsing**: Removed `ParseHandshakeManually`, `ExtractJsonField`, `ExtractJsonInt`, `ExtractJsonBool` methods (~45 lines). Newtonsoft's lenient parsing handles all fallback scenarios previously covered by these.
+
+---
+
+## [0.11.3-preview] — MCP Connection Reliability
+
+### Fixed
+- **MCP auto-reconnect**: The MCP Server no longer binds itself to a single port only at startup. Before each `ember_execute` call it resolves the current project status file and ensures the bridge is connected, covering Unity reloads, port changes, and initially disconnected sessions.
+- **Reload-state waiting**: During Unity Play Mode/domain reload, the Bridge writes a `reloading` state. The MCP Server respects that state instead of bypassing it with port scanning, then reconnects after the Bridge returns to `ready`.
+
+### Added
+- **Bridge v2 status file**: `~/.ember/ember-status-{projectHash}.json` records `ready/starting/reloading/port_busy`, `seq`, `lastHeartbeatUnixMs`, protocol version, and package version so agents can diagnose connection state precisely.
+- **MCP connection regression tests**: Added a standalone `tests/Mcp` test project covering status parsing, reloading waits, first-call auto-connect, and reconnect-on-next-call without replaying the failed request.
+
+### Changed
+- **Port discovery strategy**: The Unity Bridge records the last successful port and tries it first, then falls back to scanning 9090-9099. The MCP Server supports per-project status, explicit `--project-root`, and scan fallback.
+- **Release stability**: The MCP Server disables apphost generation to avoid macOS apphost code-signing failures, and references Ember with profiling disabled to avoid Unity Profiler ECalls in plain .NET environments.
+
+---
+
+## [0.11.2-preview] — Symmetric Hierarchy Cleanup
+
+### Fixed
+- **Child destroy orphan**: `DestroyEntity(child)` now removes the child reference from its parent's `ChildEntity` buffer, eliminating dangling entries.
+
+---
+
+## [0.11.1-preview] — Entity Templates + Hierarchy
+
+### Added
+- **Entity templates**: `EntityTemplate` with `Add<T>(value)`, `AddTag<T>()`, `AddChild(tag, template)`. Register and instantiate with `world.Instantiate(name)` to create entities with their child hierarchy in one call.
+- **Parent-child hierarchy**: `ParentComponent` + `ChildEntity : IBufferElement` for bidirectional references. `GetChildren`/`GetParent`/`RemoveChild` APIs.
+- **Cascade destroy**: `DestroyEntity` recursively destroys all child entities.
+- **Orphan detection**: `ValidateConsistency` detects `ParentComponent` pointing to non-existent entities in DEBUG mode.
+
+---
+
 ## [0.11.0-preview] — API Simplification
 
 ### Changed — Breaking

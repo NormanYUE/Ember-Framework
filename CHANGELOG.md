@@ -2,6 +2,78 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.1] — Source Generator 兼容性修复
+
+### Fixed
+- **生成代码命名空间限定**：ComponentPack adapter 和 chunk meta 生成代码使用 `global::Ember` 限定核心类型，避免用户工程存在同名类型时解析到错误符号。
+- **抽象/泛型 JobSystem 跳过**：Chunk meta generator 不再为 abstract 或开放泛型 JobSystem 生成包装代码，避免无效生成输出。
+- **注册表 sealed 幂等性**：`ComponentTypeRegistry` sealed 后允许已注册类型重复返回原 id，避免重复扫描生成注册器时误报新注册错误。
+
+### Perf
+- **ChunkJobMeta 访问器内联**：生成的 chunk wrapper 直接内联 offset/stride 访问逻辑，减少热路径上的泛型 helper 调用。
+
+## [0.12.0-preview] — MCP 命令全量覆盖 + Editor 控制
+
+### Added
+- **MCP 命令全量覆盖**：从 26 个命令扩展到 54 个，覆盖 Read (15)、Write (9)、Buffer (6)、Diag (8)、System (4)、Editor Control (4)、Hierarchy (4)。AI Agent 可通过 `ember_execute` 执行几乎所有 ECS 和 Editor 操作。
+- **Editor 控制命令**：`playmode_control`（进入/退出 Play Mode）、`set_time_scale`、`reload_scene`、`reload_domain`，AI Agent 可控制 Unity Editor 运行状态。
+- **层次结构命令**：`create_child_entity`、`attach_child`、`detach_child`、`get_hierarchy`，通过 MCP 管理父子实体关系。
+- **场景内省命令**：`get_scene_info`、`get_gameobject_info`、`read_console`，提供 Unity 场景层级和控制台日志访问。
+- **SimpleJson.GetRawValue**：提取字段原始 JSON 文本，支持嵌套对象和数组的完整保留。
+- **ConvertValue 类型扩展**：枚举类型、自定义 struct 的自动解析，新增 uint/short/ushort/byte/sbyte/ulong 类型支持。
+
+### Fixed
+- **Buffer 元素序列化**：`get_buffer` 输出改为 `JsonValue(elem)` 序列化，生成有效 JSON 替代 `ToString()` 可能的非法输出。
+- **EmberSafeWriteBatchTool apply 模式**：apply 模式现在正确执行所有操作，而非仅验证。
+- **数值解析区域设置**：所有数字解析统一使用 `CultureInfo.InvariantCulture`，修复非英语系统上的解析失败。
+- **Editor 控制命令权限**：`playmode_control` 等命令不再要求 Play Mode 前置条件。
+- **query_entities_v2 重命名**：旧名称 `query_entities_v2` 统一为 `query_entities`。
+
+### Changed
+- **MCP 架构**：从自研 MCP Server 迁移回 self-hosted 方案，保留完整源码控制和调试能力。
+
+### Changed
+- **MCP JSON 引擎**：MCP Server 从 `System.Text.Json` 迁移到 `Newtonsoft.Json`（Unity 内置包 `com.unity.nuget.newtonsoft-json@3.2.1`），消除手写 JSON 字段解析代码。
+- **package.json**：新增 `com.unity.nuget.newtonsoft-json` 依赖，用户安装包时自动解析。
+
+### Removed
+- **TcpBridge 手写解析**：删除 `ParseHandshakeManually`、`ExtractJsonField`、`ExtractJsonInt`、`ExtractJsonBool` 方法（~45 行），Newtonsoft 宽容解析已覆盖所有兜底场景。
+
+---
+
+## [0.11.3-preview] — MCP 连接可靠性
+
+### Fixed
+- **MCP 自动重连**：MCP Server 不再只在启动时固定连接一次端口。`ember_execute` 调用前会按当前项目状态文件重新解析端口并确保连接，覆盖 Unity reload、端口变化和初始未连接场景。
+- **Reload 状态等待**：Unity Play Mode/domain reload 期间写入 `reloading` 状态，MCP Server 不会绕过状态文件误连旧监听，等待 Bridge 恢复到 `ready` 后再连接。
+
+### Added
+- **Bridge v2 状态文件**：`~/.ember/ember-status-{projectHash}.json` 记录 `ready/starting/reloading/port_busy`、`seq`、`lastHeartbeatUnixMs`、协议版本和包版本，方便 Agent 精确诊断连接状态。
+- **MCP 连接回归测试**：新增独立 `tests/Mcp` 测试项目，覆盖 status 解析、reloading 等待、首次调用自动连接、断线后下一次调用重连且不重放失败请求。
+
+### Changed
+- **端口发现策略**：Unity Bridge 记录上次成功端口并优先复用；失败时再扫描 9090-9099。MCP Server 支持 per-project status、显式 `--project-root` 和端口扫描兜底。
+- **发布稳定性**：MCP Server 禁用 apphost 生成，避免 macOS apphost code signing 问题；引用 Ember 时关闭 profiling，避免普通 .NET 环境触发 Unity Profiler ECall。
+
+---
+
+## [0.11.2-preview] — 层次结构对称清理
+
+### Fixed
+- **销毁子实体残留**：`DestroyEntity(child)` 时自动从父实体的 `ChildEntity` buffer 中移除引用，不再残留已删除实体的孤儿条目。
+
+---
+
+## [0.11.1-preview] — 实体模板 + 层次结构
+
+### Added
+- **实体模板**：`EntityTemplate` 支持 `Add<T>(value)`、`AddTag<T>()`、`AddChild(tag, template)`，注册后通过 `world.Instantiate(name)` 一键创建实体及其子层级。
+- **父子层次**：`ParentComponent` + `ChildEntity : IBufferElement` 建立双向引用。`GetChildren`/`GetParent`/`RemoveChild` API。
+- **级联销毁**：`DestroyEntity` 时递归销毁所有子实体。
+- **孤儿检测**：`ValidateConsistency` 在 DEBUG 下检测 `ParentComponent` 指向不存在的实体。
+
+---
+
 ## [0.11.0-preview] — API 精简
 
 ### Changed — Breaking

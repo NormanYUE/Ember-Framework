@@ -1023,13 +1023,13 @@ MCP Server 让 AI 编码助手（Claude Code、Codex 等）通过标准 [Model C
 
 ### MCP 智能诊断
 
-Ember 深度集成了 MCP，让 AI Agent 能通过 40+ 个 `ember_execute` 命令直接读写运行中的 Unity ECS 世界。
+Ember 深度集成了 MCP，让 AI Agent 能通过 50+ 个 `ember_execute` 命令直接读写运行中的 Unity ECS 世界。
 
 **三大诊断能力：**
 
 | | |
 |---|---|
-| **🔍 实时侦查** | `get_entity_full`、`query_entities_v2`、`get_archetypes` — 直接透视运行时 ECS 世界 |
+| **🔍 实时侦查** | `get_entity_full`、`query_entities`、`get_archetypes` — 直接透视运行时 ECS 世界 |
 | **📊 性能定位** | `perf_summary` — 一键采样，自动排名最慢系统；`system_status` — 每系统 avg/max Tick 耗时 |
 | **🛠️ 运行时介入** | `add_component`、`set_singleton`、`safe_write_batch` — 不写代码就能修改运行时数据 |
 
@@ -1056,9 +1056,9 @@ AI Client            MCP Server           Unity Editor
     │◀── JSON-RPC stdio ──│                     │
 ```
 
-- **EmberBridge**：Unity Editor 内的 TCP 服务器，在 9090-9099 范围内自动扫描可用端口，将请求分派到主线程执行，结果通过 TCP 返回
-- **MCP Server**（`Ember.Mcp.Server.dll`）：独立的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。启动时从 `~/.ember/instance.json` 读取端口号，通过 stdio 与 AI 客户端通信
-- **安全模型**：默认只读——AI 可以查询 World 但不能修改。需要写操作时，必须显式添加 `--allow-write` 参数启动 MCP Server
+- **EmberBridge**：Unity Editor 内的 TCP 服务器，在 9090-9099 范围内自动扫描可用端口，将请求分派到主线程执行，结果通过 TCP 返回。Bridge 会写入 `~/.ember/ember-status-{projectHash}.json`，记录当前端口、项目根目录、`ready/reloading/port_busy` 状态和心跳时间
+- **MCP Server**（`Ember.Mcp.Server.dll`）：独立的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。每次 `ember_execute` 前都会按 `--project-root` 重新读取状态文件并确保连接；Unity reload、端口变化或首次未连接时会自动恢复
+- **安全模型**：写操作由 Unity 端按命令类型和 Play Mode 状态控制。读操作可在 Edit Mode 执行；创建/销毁实体、增删组件、写组件等写操作必须在 Play Mode 下执行
 
 ### 14.2 安装与配置
 
@@ -1092,7 +1092,12 @@ AI Client            MCP Server           Unity Editor
   "mcpServers": {
     "ember": {
       "command": "dotnet",
-      "args": ["exec", "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll", "--allow-write"]
+      "args": [
+        "exec",
+        "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll",
+        "--project-root",
+        "/path/to/UnityProject"
+      ]
     }
   }
 }
@@ -1102,24 +1107,26 @@ AI Client            MCP Server           Unity Editor
 
 | 参数 | 说明 |
 |------|------|
-| `--allow-write` | 启用写工具（默认只读） |
-| `--port <n>` | 手动指定端口（通常不需要，MCP Server 会从 `instance.json` 自动读取） |
+| `--project-root <path>` | 指定 Unity 项目根目录。推荐配置，MCP Server 用它读取对应项目的状态文件并避免连到其他 Unity 项目 |
+| `--port <n>` | 手动指定端口。通常不需要；只有在状态文件不可用且明确知道端口时使用 |
+| `--allow-write` | 旧参数，保留兼容但已不再控制权限。写操作由 Unity 端 Play Mode 和命令类型判断 |
 
-### 14.3 Command Reference (41 commands via `ember_execute`)
+### 14.3 Command Reference (54 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
-**Read (12):** world_info, query_entities, query_entities_v2, get_entity, get_entity_full, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_singletons, get_buffer_elements, entity_counts
-**Write (6):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton
+**Read (15):** world_info, query_entities, get_entity, get_entity_full, get_archetypes, get_systems, get_component_types, has_component, get_singleton, get_singletons, get_buffer_elements, entity_counts, read_console, get_scene_info, get_gameobject_info
+**Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (8):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities
+**Diagnostic (11):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy
 **System (4):** system_status, get_system_info, get_dependency_graph, advance_frame
+**Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
 **Write Safety (1):** safe_write_batch
 **World (1):** list_worlds
 
-Example: `{"op": "query_entities_v2", "all": ["Position"], "limit": 10}`
+Example: `{"op": "query_entities", "all": ["Position"], "limit": 10}`
 Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSystem"}`
 
 ### 14.4 使用示例
@@ -1127,7 +1134,7 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 以下是 AI 客户端中一次典型的交互流程：
 
 > **用户**: 查询所有有 Health 组件的实体，看看谁血量低  
-> **AI** 调用 `ember_query_entities(components=["Health"])`  
+> **AI** 调用 `ember_execute({"op":"query_entities","all":["Health"]})`  
 > → 返回 3 个实体，实体 #1 的 Health.Current = 80，实体 #2 的 Health.Current = 5  
 >
 > **用户**: 实体 #2 快死了，看看它的详细信息  
@@ -1146,13 +1153,14 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 
 | 问题 | 原因 | 解决 |
 |------|------|------|
-| "Not connected to Unity" | Bridge 未启动或 Unity 未运行 | `Window > Ember > MCP` → Start |
-| "Write operations are disabled" | 未启用 `--allow-write` | 在配置中添加 `--allow-write` 后重启客户端 |
+| "No fresh Ember bridge status was found" | Bridge 未启动、状态文件过期，或 `--project-root` 指向了错误项目 | `Window > Ember > MCP` → Start，并确认配置里的 `--project-root` 是 Unity 项目根目录 |
+| "Unity bridge is reloading" | Unity 正在切换 Play Mode 或 domain reload | 等待 Bridge 恢复到 `ready` 后重试；MCP Server 会自动重连 |
 | "Write operations require Play Mode" | 写操作必须在 Play Mode 执行 | 进入 Play Mode |
-| 客户端启动后卡住 / 无响应 | 端口冲突 | Settings 中调整端口范围，或手动 `--port` |
+| 客户端启动后卡住 / 无响应 | 端口冲突或旧连接残留 | Bridge 会优先复用上次端口并在 9090-9099 内重试；必要时重启 Ember MCP 窗口 |
 | 包更新后配置失效 | Tools~ 路径中的 hash 变化 | 窗口 `AutoUpdateConfigPaths()` 自动修复，重启 `Ember MCP` 窗口即可 |
 
 #### 日志诊断
 
 - **Unity Console**：过滤 `[Ember MCP]` 前缀，可查看 Bridge 启动状态、客户端连接/断开、请求方法名和截断的 JSON 内容
 - **Ember MCP 窗口 → Request Log**：实时显示最近 100 条请求的方法名、响应耗时（ms）和结果预览
+- **`mcp_status` 命令**：返回 `running/state/reason/reloading/statusFile/statusSeq/clientCount`，用于区分 Bridge 未启动、Unity reloading、端口占用和客户端未连接等状态
