@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.1-preview] — Source Generator Compatibility Fixes
+
+### Fixed
+- **Generated code namespace qualification**: ComponentPack adapter and chunk meta generated code now uses `global::Ember` for core types, avoiding resolution to user-defined same-name symbols.
+- **Abstract/generic JobSystem skip**: The chunk meta generator no longer emits wrappers for abstract or open generic JobSystem types, avoiding invalid generated output.
+- **Registry sealed idempotency**: `ComponentTypeRegistry` now allows already registered types to return their existing id after sealing, avoiding false new-registration errors when generated registrars are scanned again.
+
+### Perf
+- **ChunkJobMeta accessor inlining**: Generated chunk wrappers inline offset/stride access logic directly, reducing generic helper calls on hot paths.
+
 ## [0.12.0-preview] — Full MCP Command Coverage + Editor Control
 
 ### Added

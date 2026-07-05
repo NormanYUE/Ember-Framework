@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.1-preview] — Source Generator 兼容性修复
+
+### Fixed
+- **生成代码命名空间限定**：ComponentPack adapter 和 chunk meta 生成代码使用 `global::Ember` 限定核心类型，避免用户工程存在同名类型时解析到错误符号。
+- **抽象/泛型 JobSystem 跳过**：Chunk meta generator 不再为 abstract 或开放泛型 JobSystem 生成包装代码，避免无效生成输出。
+- **注册表 sealed 幂等性**：`ComponentTypeRegistry` sealed 后允许已注册类型重复返回原 id，避免重复扫描生成注册器时误报新注册错误。
+
+### Perf
+- **ChunkJobMeta 访问器内联**：生成的 chunk wrapper 直接内联 offset/stride 访问逻辑，减少热路径上的泛型 helper 调用。
+
 ## [0.12.0-preview] — MCP 命令全量覆盖 + Editor 控制
 
 ### Added
