@@ -21,9 +21,8 @@ PluginImporter:
   - first:
       Editor: Editor
     second:
-      enabled: 1
-      settings:
-        DefaultValueInitialized: true
+      enabled: 0
+      settings: {}
   userData: 
   assetBundleName: 
   assetBundleVariant: 
