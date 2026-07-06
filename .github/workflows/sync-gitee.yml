@@ -9,11 +9,6 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Sync to Gitee
         env:
           GITEE_SSH_KEY: ${{ secrets.GITEE_SSH_KEY }}
@@ -24,5 +19,5 @@ jobs:
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts 2>/dev/null
 
           git remote add gitee git@gitee.com:normanyue1992/Ember-Framework.git
-          git push gitee master develop --force
+          git push gitee ${{ github.ref }} --force
           git push gitee --tags --force
