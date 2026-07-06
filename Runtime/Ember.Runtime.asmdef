@@ -1,5 +1,5 @@
 {
-    "name": "Ember",
+    "name": "Ember.Runtime",
     "rootNamespace": "Ember",
     "references": [],
     "includePlatforms": [],
