@@ -2,6 +2,21 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.2] — OpenUPM 安装支持
+
+### Added
+- **OpenUPM 包名安装**：支持通过 `com.ember.ecs` 包名直接安装，无需 Git URL。
+- **自动配置工具**：新增 `Tools > Ember > Setup OpenUPM Registry` 菜单一键配置 OpenUPM registry。
+- **包安装工具**：新增 `Tools > Ember > Install Ember Package` 菜单自动添加依赖。
+- **安装脚本**：新增 `Tools~/setup-openupm.sh` 命令行脚本，支持批量配置。
+
+### Fixed
+- **Gitee 同步工作流**：修复 GitHub Actions 中缺少 checkout 步骤导致的同步失败。
+
+### Changed
+- **安装文档**：README 更新为双模式安装说明（包名安装 + Git URL 安装）。
+- **包仓库结构**：移除包仓库中的 `.github` 目录，同步逻辑移至主仓库。
+
 ## [0.12.1] — Source Generator 兼容性修复
 
 ### Fixed

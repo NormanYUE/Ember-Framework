@@ -2,7 +2,34 @@
 
 ## 安装
 
-在 Unity 项目中安装 Ember ECS 框架：
+### 方式一：通过包名安装（推荐）
+
+1. 打开项目的 `Packages/manifest.json`
+2. 添加 OpenUPM registry 和依赖：
+
+```json
+{
+  "scopedRegistries": [
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.ember.ecs",
+        "com.unity.collections",
+        "com.unity.mathematics",
+        "com.unity.nuget.newtonsoft-json"
+      ]
+    }
+  ],
+  "dependencies": {
+    "com.ember.ecs": "0.12.2"
+  }
+}
+```
+
+3. 保存文件，Unity 会自动下载并安装
+
+### 方式二：通过 Git URL 安装
 
 1. 打开 `Window > Package Manager`
 2. 点击 `+` → `Install package from git URL`
