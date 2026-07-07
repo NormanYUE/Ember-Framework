@@ -29,6 +29,8 @@
 
 3. 保存文件，Unity 会自动下载并安装
 
+> 最新版本：0.12.2 — 支持 OpenUPM 包名安装
+
 ### 方式二：通过 Git URL 安装
 
 1. 打开 `Window > Package Manager`
