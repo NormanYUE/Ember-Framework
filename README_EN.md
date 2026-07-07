@@ -2,7 +2,34 @@
 
 ## Installation
 
-Install the Ember ECS Framework in your Unity project:
+### Method 1: Install by Package Name (Recommended)
+
+1. Open your project's `Packages/manifest.json`
+2. Add OpenUPM registry and dependency:
+
+```json
+{
+  "scopedRegistries": [
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.ember.ecs",
+        "com.unity.collections",
+        "com.unity.mathematics",
+        "com.unity.nuget.newtonsoft-json"
+      ]
+    }
+  ],
+  "dependencies": {
+    "com.ember.ecs": "0.12.2"
+  }
+}
+```
+
+3. Save the file, Unity will automatically download and install
+
+### Method 2: Install via Git URL
 
 1. Open `Window > Package Manager`
 2. Click `+` → `Install package from git URL`
