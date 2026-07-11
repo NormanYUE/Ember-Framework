@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.4] — Source Generator 路径修复
+
+### Fixed
+- **移除 Editor/ 下的 Generator 副本**：`Ember.Generator.dll` 仅保留在 `RoslynAnalyzers/` 目录，不再被 Unity 当作 Editor 插件加载。
+
 ## [0.12.3] — 生成代码安全性修复
 
 ### Fixed

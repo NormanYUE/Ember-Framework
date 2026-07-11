@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.4] — Source Generator Path Fix
+
+### Fixed
+- **Removed stale Generator copy from Editor/**: `Ember.Generator.dll` only exists in `RoslynAnalyzers/`, no longer loaded by Unity as an Editor plugin.
+
 ## [0.12.3] — Generated Code Safety Fix
 
 ### Fixed
