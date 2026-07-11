@@ -2,6 +2,12 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.3] — Generated Code Safety Fix
+
+### Fixed
+- **ChunkMeta removed unsafe**: Generated ChunkMeta wrappers no longer use `unsafe` pointer operations, instead calling `ChunkJobMeta.Ref<T>()` instance method. User assemblies no longer need `allowUnsafeCode` enabled.
+- **Missing .meta files**: Added Unity `.meta` files for `Ember.Generator.dll` and `OpenUPMSetup.cs`.
+
 ## [0.12.2] — OpenUPM Installation Support
 
 ### Added

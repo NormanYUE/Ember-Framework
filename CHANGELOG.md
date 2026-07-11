@@ -2,6 +2,12 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.12.3] — 生成代码安全性修复
+
+### Fixed
+- **ChunkMeta 移除 unsafe**：生成的 ChunkMeta wrapper 不再使用 `unsafe` 指针操作，改为调用 `ChunkJobMeta.Ref<T>()` 实例方法。用户程序集不再需要开启 `allowUnsafeCode`。
+- **缺失 .meta 文件**：补充 `Ember.Generator.dll` 和 `OpenUPMSetup.cs` 的 Unity `.meta` 文件。
+
 ## [0.12.2] — OpenUPM 安装支持
 
 ### Added
