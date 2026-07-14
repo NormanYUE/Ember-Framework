@@ -22,7 +22,7 @@
     }
   ],
   "dependencies": {
-    "com.ember.ecs": "0.13.0-preview.2"
+    "com.ember.ecs": "0.13.0-preview.1"
   }
 }
 ```

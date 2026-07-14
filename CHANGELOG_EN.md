@@ -2,11 +2,6 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.13.0-preview.2] — Chunk Job Tag Query Fix
-
-### Fixed
-- **Chunk job tag queries**: `ITagComponent` still participates in `QueryMask` and dependency declarations, but no longer generates `ChunkMeta` data accessors or enters the `ChunkJobScheduler` data-column list. This fixes JobSystems that include tags failing on tag offset = -1.
-
 ## [0.13.0-preview.1] — Core Hot Path and Robustness Hardening
 
 ### Added
@@ -22,6 +17,7 @@ All notable changes to the Ember ECS Framework.
 - **MCP command surface**: legacy `query_entities_v2` has been fully renamed to `query_entities`.
 
 ### Fixed
+- **Chunk job tag queries**: `ITagComponent` still participates in `QueryMask` and dependency declarations, but no longer generates `ChunkMeta` data accessors or enters the `ChunkJobScheduler` data-column list. This fixes JobSystems that include tags failing on tag offset = -1.
 - **ComponentMask high-ID copy-on-write**: fixed copied masks sharing `m_ExtraWords`, which could mutate a base mask or dictionary key.
 - **Chunk row reuse zeroing**: new rows and migration-added columns no longer read stale component data; migration initializers avoid clear-then-overwrite for newly added components.
 - **Deferred destroy version safety**: deferred destroy records full `Entity` versions and no longer destroys a replacement entity with the same index.

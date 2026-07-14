@@ -2,11 +2,6 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.13.0-preview.2] — Chunk Job Tag 查询修复
-
-### Fixed
-- **Chunk job tag 查询**：`ITagComponent` 继续参与 `QueryMask`/依赖声明，但不再生成 `ChunkMeta` 数据访问器，也不会进入 `ChunkJobScheduler` 的数据列列表，修复包含 tag 的 JobSystem 因 tag offset = -1 抛错的问题。
-
 ## [0.13.0-preview.1] — 核心热路径与稳健性硬化
 
 ### Added
@@ -22,6 +17,7 @@ All notable changes to the Ember ECS Framework.
 - **MCP 命令面**：旧 `query_entities_v2` 全面更名为 `query_entities`。
 
 ### Fixed
+- **Chunk job tag 查询**：`ITagComponent` 继续参与 `QueryMask`/依赖声明，但不再生成 `ChunkMeta` 数据访问器，也不会进入 `ChunkJobScheduler` 的数据列列表，修复包含 tag 的 JobSystem 因 tag offset = -1 抛错的问题。
 - **ComponentMask 高 ID Copy-on-Write**：修复 struct 复制后共享 `m_ExtraWords` 导致 base mask 或 dictionary key 被污染的问题。
 - **Chunk row 复用清零**：新分配行与 migration 新增列不再读到旧组件数据；migration initializer 避免新增组件 clear 后再覆盖。
 - **Deferred destroy 版本安全**：延迟销毁记录完整 `Entity` version，避免误杀同 index 的新实体。
