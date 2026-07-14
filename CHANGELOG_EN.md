@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.13.0-preview.2] — Chunk Job Tag Query Fix
+
+### Fixed
+- **Chunk job tag queries**: `ITagComponent` still participates in `QueryMask` and dependency declarations, but no longer generates `ChunkMeta` data accessors or enters the `ChunkJobScheduler` data-column list. This fixes JobSystems that include tags failing on tag offset = -1.
+
 ## [0.13.0-preview.1] — Core Hot Path and Robustness Hardening
 
 ### Added

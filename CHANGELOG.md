@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.13.0-preview.2] — Chunk Job Tag 查询修复
+
+### Fixed
+- **Chunk job tag 查询**：`ITagComponent` 继续参与 `QueryMask`/依赖声明，但不再生成 `ChunkMeta` 数据访问器，也不会进入 `ChunkJobScheduler` 的数据列列表，修复包含 tag 的 JobSystem 因 tag offset = -1 抛错的问题。
+
 ## [0.13.0-preview.1] — 核心热路径与稳健性硬化
 
 ### Added
