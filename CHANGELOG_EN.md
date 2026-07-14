@@ -2,6 +2,29 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.13.0-preview.1] — Core Hot Path and Robustness Hardening
+
+### Added
+- **ComponentPack**: descriptor-driven pack/build/writeback API for chunk-wise component column packing into dense arrays and batched writeback.
+- **Read/write access primitives**: added `ReadOnlyComponentLookup<T>`, `WritableComponentLookup<T>`, `ReadOnlyChunkColumn<T>`, and the `SystemContext.Read/Write` access model.
+- **Batch structural changes**: `AddComponentBatch` / `RemoveComponentBatch` now group by source archetype/chunk and reuse migration state.
+- **Artifact/Consumer/Generator gates**: added public API, Profiler/Safety compile-symbol, generator, and consumer build checks.
+
+### Changed
+- **System API consolidation**: serial systems now use `SystemBase`; legacy `SimpleSystem`, `DeclaredSystem`, `ChunkSystem`, `EntitySystem`, and old `ComponentLookup<T>` are no longer public APIs.
+- **Profiler/Safety default off**: production DLLs do not compile profiler marker or access-validation strings unless explicitly enabled through MSBuild properties.
+- **Query/Column hot paths**: `CompiledQuery` shares query cores while keeping read/write masks independent; column access and component lookup use typed accessors, and high-ID `ArchetypeLayout` lookup uses a direct index array.
+- **MCP command surface**: legacy `query_entities_v2` has been fully renamed to `query_entities`.
+
+### Fixed
+- **ComponentMask high-ID copy-on-write**: fixed copied masks sharing `m_ExtraWords`, which could mutate a base mask or dictionary key.
+- **Chunk row reuse zeroing**: new rows and migration-added columns no longer read stale component data; migration initializers avoid clear-then-overwrite for newly added components.
+- **Deferred destroy version safety**: deferred destroy records full `Entity` versions and no longer destroys a replacement entity with the same index.
+- **Deferred singleton preflight**: deferred create batches validate singleton conflicts before placing any entity.
+- **SystemTicker parallel lifecycle**: parallel layers now follow Begin/Complete/EndParallel/EndTick ordering, and failed systems no longer play back partial deferred changes.
+- **BufferStore long-term memory**: destroyed buffer value ranges are reusable, with fragmentation metrics exposed for debugging.
+- **Source Generator**: cross-syntax-tree and expression-bodied `DeclareAccess` analysis is stable, with explicit cross-assembly component slot ordering.
+
 ## [0.12.4] — Source Generator Path Fix
 
 ### Fixed

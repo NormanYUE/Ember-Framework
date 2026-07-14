@@ -2,6 +2,29 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [0.13.0-preview.1] — 核心热路径与稳健性硬化
+
+### Added
+- **ComponentPack**：新增 descriptor 驱动的 pack/build/writeback API，用于按 chunk 打包组件列到连续数组并批量写回。
+- **只读/可写访问原语**：新增 `ReadOnlyComponentLookup<T>`、`WritableComponentLookup<T>`、`ReadOnlyChunkColumn<T>` 和 `SystemContext.Read/Write` 访问模型。
+- **批量结构变化**：`AddComponentBatch` / `RemoveComponentBatch` 按源 archetype/chunk 分组并复用 migration state。
+- **Artifact/Consumer/Generator 门禁**：新增公开 API、Profiler/Safety 编译符号、生成器和消费项目构建检查。
+
+### Changed
+- **系统 API 收口**：普通系统统一为 `SystemBase`；旧 `SimpleSystem`、`DeclaredSystem`、`ChunkSystem`、`EntitySystem` 和旧 `ComponentLookup<T>` 不再作为公开 API。
+- **Profiler/Safety 默认关闭**：生产 DLL 默认不编译 profiler marker 和访问校验字符串；需要分析时显式启用 MSBuild 属性。
+- **Query/Column 热路径**：`CompiledQuery` 共享 query core，但 read/write mask 独立；列访问与 component lookup 使用 typed accessor，`ArchetypeLayout` 高 ID 查询改为直接索引数组。
+- **MCP 命令面**：旧 `query_entities_v2` 全面更名为 `query_entities`。
+
+### Fixed
+- **ComponentMask 高 ID Copy-on-Write**：修复 struct 复制后共享 `m_ExtraWords` 导致 base mask 或 dictionary key 被污染的问题。
+- **Chunk row 复用清零**：新分配行与 migration 新增列不再读到旧组件数据；migration initializer 避免新增组件 clear 后再覆盖。
+- **Deferred destroy 版本安全**：延迟销毁记录完整 `Entity` version，避免误杀同 index 的新实体。
+- **Deferred singleton 预检**：批量 deferred create 在放置任何实体前检查 singleton 冲突。
+- **SystemTicker 并行生命周期**：并行层完整执行 Begin/Complete/EndParallel/EndTick 顺序，失败系统不再回放部分 deferred changes。
+- **BufferStore 长期内存**：销毁 buffer 后 value range 可复用，并暴露碎片率调试信息。
+- **Source Generator**：跨语法树/表达式体 `DeclareAccess` 分析稳定，跨程序集组件槽位排序明确。
+
 ## [0.12.4] — Source Generator 路径修复
 
 ### Fixed
