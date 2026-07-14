@@ -2,7 +2,12 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.13.0-preview.1] — 核心热路径与稳健性硬化
+## [1.0.1] — Chunk Job Tag 查询修复
+
+### Fixed
+- **Chunk job tag 查询**：`ITagComponent` 继续参与 `QueryMask`/依赖声明，但不再生成 `ChunkMeta` 数据访问器，也不会进入 `ChunkJobScheduler` 的数据列列表，修复包含 tag 的 JobSystem 因 tag offset = -1 抛错的问题。
+
+## [1.0.0] — 核心热路径与稳健性硬化
 
 ### Added
 - **ComponentPack**：新增 descriptor 驱动的 pack/build/writeback API，用于按 chunk 打包组件列到连续数组并批量写回。
@@ -17,7 +22,6 @@ All notable changes to the Ember ECS Framework.
 - **MCP 命令面**：旧 `query_entities_v2` 全面更名为 `query_entities`。
 
 ### Fixed
-- **Chunk job tag 查询**：`ITagComponent` 继续参与 `QueryMask`/依赖声明，但不再生成 `ChunkMeta` 数据访问器，也不会进入 `ChunkJobScheduler` 的数据列列表，修复包含 tag 的 JobSystem 因 tag offset = -1 抛错的问题。
 - **ComponentMask 高 ID Copy-on-Write**：修复 struct 复制后共享 `m_ExtraWords` 导致 base mask 或 dictionary key 被污染的问题。
 - **Chunk row 复用清零**：新分配行与 migration 新增列不再读到旧组件数据；migration initializer 避免新增组件 clear 后再覆盖。
 - **Deferred destroy 版本安全**：延迟销毁记录完整 `Entity` version，避免误杀同 index 的新实体。
@@ -62,7 +66,7 @@ All notable changes to the Ember ECS Framework.
 ### Perf
 - **ChunkJobMeta 访问器内联**：生成的 chunk wrapper 直接内联 offset/stride 访问逻辑，减少热路径上的泛型 helper 调用。
 
-## [0.12.0-preview] — MCP 命令全量覆盖 + Editor 控制
+## [0.12.0] — MCP 命令全量覆盖 + Editor 控制
 
 ### Added
 - **MCP 命令全量覆盖**：从 26 个命令扩展到 54 个，覆盖 Read (15)、Write (9)、Buffer (6)、Diag (8)、System (4)、Editor Control (4)、Hierarchy (4)。AI Agent 可通过 `ember_execute` 执行几乎所有 ECS 和 Editor 操作。
@@ -91,7 +95,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.11.3-preview] — MCP 连接可靠性
+## [0.11.3] — MCP 连接可靠性
 
 ### Fixed
 - **MCP 自动重连**：MCP Server 不再只在启动时固定连接一次端口。`ember_execute` 调用前会按当前项目状态文件重新解析端口并确保连接，覆盖 Unity reload、端口变化和初始未连接场景。
@@ -107,14 +111,14 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.11.2-preview] — 层次结构对称清理
+## [0.11.2] — 层次结构对称清理
 
 ### Fixed
 - **销毁子实体残留**：`DestroyEntity(child)` 时自动从父实体的 `ChildEntity` buffer 中移除引用，不再残留已删除实体的孤儿条目。
 
 ---
 
-## [0.11.1-preview] — 实体模板 + 层次结构
+## [0.11.1] — 实体模板 + 层次结构
 
 ### Added
 - **实体模板**：`EntityTemplate` 支持 `Add<T>(value)`、`AddTag<T>()`、`AddChild(tag, template)`，注册后通过 `world.Instantiate(name)` 一键创建实体及其子层级。
@@ -124,7 +128,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.11.0-preview] — API 精简
+## [0.11.0] — API 精简
 
 ### Changed — Breaking
 - **System 重命名**：`SystemBase` → `SimpleSystem`，`DeclaredSystemBase` → `DeclaredSystem`。名称直观反映用途：SimpleSystem = 简单串行 + 全局 barrier，DeclaredSystem = 声明访问 + 参与依赖图。
@@ -134,7 +138,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.11-preview] — MCP 性能诊断
+## [0.10.11] — MCP 性能诊断
 
 ### Added
 - **`perf_summary` MCP 命令**：一键性能诊断，采样 N 帧自动排名最慢系统，返回帧级耗时分解和 Top-N 慢系统。支持 `tickerIndex`/`sampleFrames`/`topN` 参数。
@@ -143,14 +147,14 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.10-preview] — 热路径性能修复
+## [0.10.10] — 热路径性能修复
 
 ### Fixed
 - **Tick 性能回归**：`ValidateConsistency()` 从 `Tick()` 热路径中移除（改为按需调用），消除每 Tick 的 O(N) 遍历和 `HashSet` 分配。
 
 ---
 
-## [0.10.9-preview] — 资源边界保护
+## [0.10.9] — 资源边界保护
 
 ### Added
 - **实体上限**：`World.MaxEntities`（默认 1,000,000），`CreateEntity` 触达上限时抛出 `InvalidOperationException`，避免无限制创建导致 OOM。
@@ -159,7 +163,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.8-preview] — ECB 健壮性
+## [0.10.8] — ECB 健壮性
 
 ### Fixed
 - **ECB Dispose 安全**：6 个公共方法添加 `ThrowIfDisposed()` 守卫，Dispose 后调用不再访问已释放 NativeList，改为 `ObjectDisposedException`。
@@ -168,7 +172,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.7-preview] — 结构变更异常安全
+## [0.10.7] — 结构变更异常安全
 
 ### Fixed
 - **批处理预分配**：`AddComponentBatch`/`RemoveComponentBatch` 迁移实体前先确保所有目标 Chunk slot 存在，避免中途分配失败导致部分实体已迁移的不一致状态。
@@ -179,7 +183,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.6-preview] — 崩溃防护补充
+## [0.10.6] — 崩溃防护补充
 
 ### Fixed
 - **遗漏的 ThrowIfDisposed 守卫**：`World.Exists`、5 个 BufferElement 方法、4 个 UNITY_EDITOR Buffer 内省方法添加守卫。
@@ -191,7 +195,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.5-preview] — 崩溃防护加固
+## [0.10.5] — 崩溃防护加固
 
 ### Fixed
 - **World Dispose 后操作崩溃**：32 个公共 API 入口添加 `ThrowIfDisposed()` 守卫，Dispose 后调用不再抛 `NullReferenceException`，改为明确的 `ObjectDisposedException`。
@@ -204,14 +208,14 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.4-preview] — 安装文档
+## [0.10.4] — 安装文档
 
 ### Added
 - **Unity 安装说明**：README 新增安装章节
 
 ---
 
-## [0.10.3-preview] — Chunk 池化 + GC 热路径消除
+## [0.10.3] — Chunk 池化 + GC 热路径消除
 
 ### Fixed
 - **TypeIdEnumerator off-by-one**：`MoveNext()` 未在移出 set bit 后递增 `m_BitPos`，导致同一 word 内首个 bit 之后的所有 bit 偏移 -1，Archetype 创建丢失组件类型。
@@ -240,12 +244,12 @@ All notable changes to the Ember ECS Framework.
 ### Perf
 - **组件类型名缓存**：`ValidateAccess` 循环中每帧调用 `Type.Name` 产生 ~12.5KB GC。修复：`Init()` 时一次性缓存到 `m_CachedTypeNames[]`，热路径直接索引访问（零分配）。
 
-## [0.10.1-preview] — ValidateAccess GC 分配修复
+## [0.10.1] — ValidateAccess GC 分配修复
 
 ### Perf
 - **ValidateAccess 零分配**：4 个 `new List<string>()` + 4 个 `.ToArray()` 替换为复用缓存 + `Array.Empty<string>()`。访问声明正确时每帧零分配，消除 ~56 次/帧的 GC 压力。
 
-## [0.10.0-preview] — Access 验证 + 实体命名 + 编辑器代码隔离
+## [0.10.0] — Access 验证 + 实体命名 + 编辑器代码隔离
 
 ### Added
 - **Access 运行时验证**：`SystemContext` 自动追踪 Get/Set/Add/Remove 的实际组件访问，tick 结束后对比 DeclareAccess 声明。漏声明（红色）→ Console Warning；过度声明（黄色）→ 限制并行度提示。全部 `#if UNITY_EDITOR` 零运行时开销。
@@ -272,7 +276,7 @@ All notable changes to the Ember ECS Framework.
 ### Changed
 - **Systems Window 精简**：移除 Table 视图、Graph/Table 切换按钮、Lifecycle/Layers 勾选框。净减 83 行。
 
-## [0.8.0-preview] — 依赖图可视化 + MCP 稳定性修复
+## [0.8.0] — 依赖图可视化 + MCP 稳定性修复
 
 ### Added
 - **依赖图视图**：Systems Window 新增 Graph/Table 切换按钮，Graph 视图以分层节点图展示依赖关系。并行层绿色背景、串行层灰色背景，系统节点显示类型和 Read/Write 组件访问列表。箭头标识依赖方向，选中节点底部详情面板展示 Hook、组件访问、层信息。
@@ -283,7 +287,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.7.5-preview] — Skills 一键安装 + 数据流视图优化
+## [0.7.5] — Skills 一键安装 + 数据流视图优化
 
 ### Added
 - **Skills 一键安装**：MCP 窗口新增 Skills foldout，一键安装 `ember-perf-optimize`（性能优化）和 `ember-architecture`（架构指南）到项目 `.claude/skills/`，Claude Code 和 Codex 自动发现。`EmberSkillManager` 内嵌完整 SKILL.md 内容为编译时常量，`IsInstalled()` 运行时文件存在性检查。
@@ -295,7 +299,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.7.1-preview] — Editor 窗口列对齐修复 + Entities 界面简化
+## [0.7.1] — Editor 窗口列对齐修复 + Entities 界面简化
 
 ### Fixed
 - **4 个 Editor 窗口列对齐**：`SystemsWindow`/`EntitiesWindow`/`ArchetypesWindow`/`ComponentTypesWindow` 表头与数据行宽度错位。根因：表头在 `ScrollView` 外用 `EditorStyles.toolbar`，数据行在内用 `EditorStyles.helpBox`，滚动条 + 内边距差异导致对齐偏移。修复：表头统一移入 `BeginScrollView`，用 `EditorGUI.DrawRect` + 手动 `Rect` 定位，列宽常量化。
@@ -305,7 +309,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.7.0-preview] — 开发 Agent 体系 + Editor 工具增强
+## [0.7.0] — 开发 Agent 体系 + Editor 工具增强
 
 ### Added
 - **开发 Agent 体系**：`ember-dev` 主入口 + `ember-code-review`/`ember-perf-check`/`ember-unit-test`/`ember-release` 子 Agent，覆盖代码审查、性能检查、单元测试、发布流程。
@@ -329,7 +333,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.6.0-preview] — 真并行调度 + MCP 同步
+## [0.6.0] — 真并行调度 + MCP 同步
 
 ### Added
 - **ComponentInspector 可编辑**：Play Mode 下 int/float/double/bool/long/string 字段直接编辑，`World.SetComponent<T>` 自动回写。
@@ -364,7 +368,7 @@ All notable changes to the Ember ECS Framework.
 - `JobSystemBase.ScheduleJob` 返回值 `void` → `JobHandle`。
 - `ChunkJobScheduler.Schedule<T>` 保持兼容（同步 Complete），`ScheduleAsync<T>` 供框架内部。
 
-## [0.5.2-preview] — 性能 + 稳健性扫除
+## [0.5.2] — 性能 + 稳健性扫除
 
 ### Perf
 - **ComponentMask >256 COW 消除**：`EnsureExtraCapacityForWrite` 容量足够时不再 `CloneExtraForWrite`。
@@ -379,7 +383,7 @@ All notable changes to the Ember ECS Framework.
 - **Error message context**：`ComponentTypeRegistry` 异常加 `max registered` 范围。
 - **BufferElement 类型安全**：`Dictionary<Type, object>` → `IBufferElementStore` 泛型接口。
 
-## [0.5.1-preview] — 混合层语义修复 + 零分配加固
+## [0.5.1] — 混合层语义修复 + 零分配加固
 
 ### Fixed
 - **SystemTicker 混合层**：混入 SystemBase/DeclaredSystemBase 的层整层串行执行，不再跳过非 JobSystem。
@@ -397,7 +401,7 @@ All notable changes to the Ember ECS Framework.
 - **systemIndices 复用**：`List<int>(8)` 跨层复用。
 - **`GetTimestamp()`**：替代 `Stopwatch.StartNew()`，零分配计时。
 
-## [0.5.0-preview] — IJobParallelFor 默认路径 + 零分配调度
+## [0.5.0] — IJobParallelFor 默认路径 + 零分配调度
 
 ### Changed — Breaking
 - **`IEmberChunkJob.Execute` 签名变更**：`Execute(Chunk chunk, int)` → `Execute(ChunkJobMeta meta, int)`。ChunkJobMeta 含 BufferPtr、EntityCount、Comp0-3 Offset/Stride，通过 unsafe 指针直接访问组件数据。
@@ -405,7 +409,7 @@ All notable changes to the Ember ECS Framework.
 - **移除 `Parallel.ForEach` 路径**：默认调度改为 `ChunkJobWrapper<T> : IJobParallelFor`，消除托管调度分配。
 - **移除 `ExecuteUnsafe`**：不再需要双路径，IJobParallelFor 是唯一默认路径。
 
-## [0.4.1-preview] — GC 零分配 + IJobParallelFor 接入 + MCP 多实例修复
+## [0.4.1] — GC 零分配 + IJobParallelFor 接入 + MCP 多实例修复
 
 ### Fixed — GC
 - **Stopwatch.StartNew() → GetTimestamp()**：每 system tick 零分配计时。
@@ -425,7 +429,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.4.0-preview] — 并行化 + MCP v0.4.0
+## [0.4.0] — 并行化 + MCP v0.4.0
 
 ### Added — 并行化
 - **EcsSystem 抽象基类**：提取 OnCreate/OnDestroy/生命周期钩子/ECB，SystemBase 和 JobSystemBase 兄弟类共享。

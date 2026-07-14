@@ -2,7 +2,12 @@
 
 All notable changes to the Ember ECS Framework.
 
-## [0.13.0-preview.1] — Core Hot Path and Robustness Hardening
+## [1.0.1] — Chunk Job Tag Query Fix
+
+### Fixed
+- **Chunk job tag queries**: `ITagComponent` still participates in `QueryMask` and dependency declarations, but no longer generates `ChunkMeta` data accessors or enters the `ChunkJobScheduler` data-column list. This fixes JobSystems that include tags failing on tag offset = -1.
+
+## [1.0.0] — Core Hot Path and Robustness Hardening
 
 ### Added
 - **ComponentPack**: descriptor-driven pack/build/writeback API for chunk-wise component column packing into dense arrays and batched writeback.
@@ -17,7 +22,6 @@ All notable changes to the Ember ECS Framework.
 - **MCP command surface**: legacy `query_entities_v2` has been fully renamed to `query_entities`.
 
 ### Fixed
-- **Chunk job tag queries**: `ITagComponent` still participates in `QueryMask` and dependency declarations, but no longer generates `ChunkMeta` data accessors or enters the `ChunkJobScheduler` data-column list. This fixes JobSystems that include tags failing on tag offset = -1.
 - **ComponentMask high-ID copy-on-write**: fixed copied masks sharing `m_ExtraWords`, which could mutate a base mask or dictionary key.
 - **Chunk row reuse zeroing**: new rows and migration-added columns no longer read stale component data; migration initializers avoid clear-then-overwrite for newly added components.
 - **Deferred destroy version safety**: deferred destroy records full `Entity` versions and no longer destroys a replacement entity with the same index.
@@ -62,7 +66,7 @@ All notable changes to the Ember ECS Framework.
 ### Perf
 - **ChunkJobMeta accessor inlining**: Generated chunk wrappers inline offset/stride access logic directly, reducing generic helper calls on hot paths.
 
-## [0.12.0-preview] — Full MCP Command Coverage + Editor Control
+## [0.12.0] — Full MCP Command Coverage + Editor Control
 
 ### Added
 - **Full MCP command coverage**: Expanded from 26 to 54 commands covering Read (15), Write (9), Buffer (6), Diag (8), System (4), Editor Control (4), Hierarchy (4). AI agents can perform nearly all ECS and Editor operations via `ember_execute`.
@@ -91,7 +95,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.11.3-preview] — MCP Connection Reliability
+## [0.11.3] — MCP Connection Reliability
 
 ### Fixed
 - **MCP auto-reconnect**: The MCP Server no longer binds itself to a single port only at startup. Before each `ember_execute` call it resolves the current project status file and ensures the bridge is connected, covering Unity reloads, port changes, and initially disconnected sessions.
@@ -107,14 +111,14 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.11.2-preview] — Symmetric Hierarchy Cleanup
+## [0.11.2] — Symmetric Hierarchy Cleanup
 
 ### Fixed
 - **Child destroy orphan**: `DestroyEntity(child)` now removes the child reference from its parent's `ChildEntity` buffer, eliminating dangling entries.
 
 ---
 
-## [0.11.1-preview] — Entity Templates + Hierarchy
+## [0.11.1] — Entity Templates + Hierarchy
 
 ### Added
 - **Entity templates**: `EntityTemplate` with `Add<T>(value)`, `AddTag<T>()`, `AddChild(tag, template)`. Register and instantiate with `world.Instantiate(name)` to create entities with their child hierarchy in one call.
@@ -124,7 +128,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.11.0-preview] — API Simplification
+## [0.11.0] — API Simplification
 
 ### Changed — Breaking
 - **System rename**: `SystemBase` → `SimpleSystem`, `DeclaredSystemBase` → `DeclaredSystem`. Names now reflect usage: SimpleSystem = simple serial + global barrier, DeclaredSystem = declared access + dependency graph participant.
@@ -134,7 +138,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.11-preview] — MCP Performance Diagnostics
+## [0.10.11] — MCP Performance Diagnostics
 
 ### Added
 - **`perf_summary` MCP command**: One-click performance diagnostic. Samples N frames, auto-ranks slowest systems, returns frame-level timing breakdown with Top-N slow systems. Supports `tickerIndex`/`sampleFrames`/`topN` parameters.
@@ -143,14 +147,14 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.10-preview] — Hot-Path Performance Fix
+## [0.10.10] — Hot-Path Performance Fix
 
 ### Fixed
 - **Tick performance regression**: Removed `ValidateConsistency()` from hot `Tick()` path (now on-demand only), eliminating per-Tick O(N) traversal and `HashSet` allocation.
 
 ---
 
-## [0.10.9-preview] — Resource Boundary Protection
+## [0.10.9] — Resource Boundary Protection
 
 ### Added
 - **Entity limit**: `World.MaxEntities` (default 1,000,000). `CreateEntity` throws `InvalidOperationException` when limit is reached, preventing OOM from unbounded creation.
@@ -159,7 +163,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.8-preview] — ECB Robustness
+## [0.10.8] — ECB Robustness
 
 ### Fixed
 - **ECB Dispose safety**: Added `ThrowIfDisposed()` guards to 6 public methods. Calls after Dispose throw `ObjectDisposedException` instead of accessing disposed NativeList.
@@ -168,7 +172,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.7-preview] — Structural Change Exception Safety
+## [0.10.7] — Structural Change Exception Safety
 
 ### Fixed
 - **Batch pre-allocation**: `AddComponentBatch`/`RemoveComponentBatch` pre-allocate all target chunk slots before migrating any entity, preventing partial state if allocation fails mid-batch.
@@ -179,7 +183,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.6-preview] — Crash Prevention Refinements
+## [0.10.6] — Crash Prevention Refinements
 
 ### Fixed
 - **Missing ThrowIfDisposed guards**: Added guards to `World.Exists`, 5 BufferElement methods, and 4 UNITY_EDITOR Buffer introspection methods.
@@ -191,7 +195,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.5-preview] — Crash Prevention Hardening
+## [0.10.5] — Crash Prevention Hardening
 
 ### Fixed
 - **World post-Dispose crash**: Added `ThrowIfDisposed()` guards to 32 public API entry points. Calls after Dispose throw `ObjectDisposedException` instead of `NullReferenceException`.
@@ -204,14 +208,14 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.10.4-preview] — Installation Documentation
+## [0.10.4] — Installation Documentation
 
 ### Added
 - **Unity installation guide**: Added installation section to README.
 
 ---
 
-## [0.10.3-preview] — Chunk Pooling + GC Hot-Path Elimination
+## [0.10.3] — Chunk Pooling + GC Hot-Path Elimination
 
 ### Fixed
 - **TypeIdEnumerator off-by-one**: `MoveNext()` did not increment `m_BitPos` after removing a set bit, causing all bits after the first in the same word to be offset by -1, missing component types during Archetype creation.
@@ -240,12 +244,12 @@ All notable changes to the Ember ECS Framework.
 ### Perf
 - **Component type name caching**: `Type.Name` per-frame calls in `ValidateAccess` loop produced ~12.5KB GC. Fixed: cached once at `Init()` into `m_CachedTypeNames[]`, hot path indexed directly (zero allocation).
 
-## [0.10.1-preview] — ValidateAccess GC Allocation Fix
+## [0.10.1] — ValidateAccess GC Allocation Fix
 
 ### Perf
 - **ValidateAccess zero allocation**: 4 `new List<string>()` + 4 `.ToArray()` replaced with reusable caches + `Array.Empty<string>()`. Zero per-frame allocation when access declarations are correct, eliminating ~56 allocations/frame of GC pressure.
 
-## [0.10.0-preview] — Access Validation + Entity Naming + Editor Code Isolation
+## [0.10.0] — Access Validation + Entity Naming + Editor Code Isolation
 
 ### Added
 - **Access runtime validation**: `SystemContext` automatically tracks actual Get/Set/Add/Remove component access, comparing against `DeclareAccess` declarations after tick. Missing declarations (red) → Console Warning; over-declarations (yellow) → parallelism restriction hint. All wrapped in `#if UNITY_EDITOR`, zero runtime overhead.
@@ -272,7 +276,7 @@ All notable changes to the Ember ECS Framework.
 ### Changed
 - **Systems Window simplification**: Removed Table view, Graph/Table toggle, Lifecycle/Layers toggles. Net reduction of 83 lines.
 
-## [0.8.0-preview] — Dependency Graph Visualization + MCP Stability Fixes
+## [0.8.0] — Dependency Graph Visualization + MCP Stability Fixes
 
 ### Added
 - **Dependency graph view**: Systems Window adds Graph/Table toggle button. Graph view displays dependencies as layered nodes. Parallel layers green background, serial layers gray. System nodes show type and Read/Write component access lists. Arrows indicate dependency direction. Selected node bottom panel shows hooks, component access, layer info.
@@ -283,7 +287,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.7.5-preview] — Skills One-Click Install + Data Flow View Optimization
+## [0.7.5] — Skills One-Click Install + Data Flow View Optimization
 
 ### Added
 - **Skills one-click install**: MCP window adds Skills foldout for one-click installation of `ember-perf-optimize` (performance optimization) and `ember-architecture` (architecture guide) to project `.claude/skills/`, auto-discovered by Claude Code and Codex. `EmberSkillManager` embeds full SKILL.md content as compile-time constants; `IsInstalled()` runtime file existence check.
@@ -295,7 +299,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.7.1-preview] — Editor Window Column Alignment Fix + Entities UI Simplification
+## [0.7.1] — Editor Window Column Alignment Fix + Entities UI Simplification
 
 ### Fixed
 - **4 Editor window column alignment**: `SystemsWindow`/`EntitiesWindow`/`ArchetypesWindow`/`ComponentTypesWindow` header-data row width mismatch. Root cause: headers outside `ScrollView` using `EditorStyles.toolbar`, data rows inside using `EditorStyles.helpBox`; scrollbar + padding differences caused alignment offset. Fix: headers moved into `BeginScrollView`, using `EditorGUI.DrawRect` + manual `Rect` positioning, column widths as constants.
@@ -305,7 +309,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.7.0-preview] — Development Agent System + Editor Tool Enhancements
+## [0.7.0] — Development Agent System + Editor Tool Enhancements
 
 ### Added
 - **Development Agent System**: `ember-dev` main entry + `ember-code-review`/`ember-perf-check`/`ember-unit-test`/`ember-release` sub-agents covering code review, performance checking, unit testing, and release workflow.
@@ -329,7 +333,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.6.0-preview] — True Parallel Scheduling + MCP Synchronization
+## [0.6.0] — True Parallel Scheduling + MCP Synchronization
 
 ### Added
 - **ComponentInspector editable**: Play Mode int/float/double/bool/long/string fields directly editable, `World.SetComponent<T>` auto-writes back via reflection.
@@ -364,7 +368,7 @@ All notable changes to the Ember ECS Framework.
 - `JobSystemBase.ScheduleJob` return type `void` → `JobHandle`.
 - `ChunkJobScheduler.Schedule<T>` stays compatible (synchronous Complete), `ScheduleAsync<T>` for framework internal use.
 
-## [0.5.2-preview] — Performance + Robustness Sweep
+## [0.5.2] — Performance + Robustness Sweep
 
 ### Perf
 - **ComponentMask >256 COW elimination**: `EnsureExtraCapacityForWrite` no longer `CloneExtraForWrite` when capacity is sufficient.
@@ -379,7 +383,7 @@ All notable changes to the Ember ECS Framework.
 - **Error message context**: `ComponentTypeRegistry` exceptions include `max registered` range.
 - **BufferElement type safety**: `Dictionary<Type, object>` → `IBufferElementStore` generic interface.
 
-## [0.5.1-preview] — Mixed Layer Semantics Fix + Zero Allocation Hardening
+## [0.5.1] — Mixed Layer Semantics Fix + Zero Allocation Hardening
 
 ### Fixed
 - **SystemTicker mixed layers**: Layers containing SystemBase/DeclaredSystemBase now execute the entire layer serially, no longer skipping non-JobSystem members.
@@ -397,7 +401,7 @@ All notable changes to the Ember ECS Framework.
 - **systemIndices reuse**: `List<int>(8)` reused across layers.
 - **`GetTimestamp()`**: Replaces `Stopwatch.StartNew()`, zero-allocation timing.
 
-## [0.5.0-preview] — IJobParallelFor Default Path + Zero-Allocation Scheduling
+## [0.5.0] — IJobParallelFor Default Path + Zero-Allocation Scheduling
 
 ### Changed — Breaking
 - **`IEmberChunkJob.Execute` signature change**: `Execute(Chunk chunk, int)` → `Execute(ChunkJobMeta meta, int)`. ChunkJobMeta contains BufferPtr, EntityCount, Comp0-3 Offset/Stride, enabling direct component data access via unsafe pointers.
@@ -405,7 +409,7 @@ All notable changes to the Ember ECS Framework.
 - **Removed `Parallel.ForEach` path**: Default scheduling changed to `ChunkJobWrapper<T> : IJobParallelFor`, eliminating managed scheduling allocations.
 - **Removed `ExecuteUnsafe`**: No longer need dual paths; IJobParallelFor is the sole default path.
 
-## [0.4.1-preview] — GC Zero Allocation + IJobParallelFor Integration + MCP Multi-Instance Fix
+## [0.4.1] — GC Zero Allocation + IJobParallelFor Integration + MCP Multi-Instance Fix
 
 ### Fixed — GC
 - **Stopwatch.StartNew() → GetTimestamp()**: Zero-allocation per-system tick timing.
@@ -425,7 +429,7 @@ All notable changes to the Ember ECS Framework.
 
 ---
 
-## [0.4.0-preview] — Parallelization + MCP v0.4.0
+## [0.4.0] — Parallelization + MCP v0.4.0
 
 ### Added — Parallelization
 - **EcsSystem abstract base class**: Extracts OnCreate/OnDestroy/lifecycle hooks/ECB; SystemBase and JobSystemBase share as sibling classes.
