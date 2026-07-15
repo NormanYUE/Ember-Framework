@@ -2,6 +2,17 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.1.0] — 热路径与诊断采样优化
+
+### Added
+- **perf_summary trackingMode**：`perf_summary` 新增 `trackingMode="total"`，只采样总 Tick 墙钟耗时，不打开系统级 diagnostics；默认 `trackingMode="systems"` 保持原有系统耗时分解。
+- **ECSManager.TickerCount**：公开只读 ticker 数量，供工具和诊断路径在不创建调试视图的情况下验证 ticker 范围。
+
+### Changed
+- **DependencyGraph ready-set 分层**：依赖图按 ready-set 方式构建并行层，允许后置但无依赖的系统进入更早层，同时保留未声明系统和结构变化系统的 barrier 语义。
+- **MCP Bridge 诊断开关**：MCP Bridge 启动/停止不再增减 `DebugWindowRefCount`，避免仅连接工具就打开 SystemTicker 采样。
+- **ComponentPack 行访问热路径**：`PackReadContext` / `PackWriteContext` 不再在每次行读写时构造 `ColumnAccessor<T>`，列缓存直接按 `ComponentTypeCache<T>.TypeId` 缓存 chunk 指针与 stride。
+
 ## [1.0.1] — Chunk Job Tag 查询修复
 
 ### Fixed

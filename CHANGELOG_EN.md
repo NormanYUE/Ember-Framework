@@ -2,6 +2,17 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.1.0] — Hot Path and Diagnostic Sampling Optimizations
+
+### Added
+- **perf_summary trackingMode**: `perf_summary` now supports `trackingMode="total"` for total Tick wall-clock sampling without enabling system-level diagnostics. The default `trackingMode="systems"` keeps the existing per-system timing breakdown.
+- **ECSManager.TickerCount**: Exposes the ticker count as a read-only property so tools and diagnostics can validate ticker ranges without creating debug views.
+
+### Changed
+- **DependencyGraph ready-set layering**: Dependency layers are built with a ready-set algorithm, allowing later independent systems to run in earlier layers while preserving undeclared-system and structural-change barriers.
+- **MCP Bridge diagnostic switch**: Starting or stopping the MCP Bridge no longer increments `DebugWindowRefCount`, so merely connecting tools does not enable SystemTicker sampling.
+- **ComponentPack row-access hot path**: `PackReadContext` / `PackWriteContext` no longer construct `ColumnAccessor<T>` per row access; the column cache uses `ComponentTypeCache<T>.TypeId` directly to cache chunk pointers and strides.
+
 ## [1.0.1] — Chunk Job Tag Query Fix
 
 ### Fixed

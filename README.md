@@ -1019,6 +1019,9 @@ ECSManager.Tick(index, dt)
      3. 系统成功结束后自动回放 ECB
      4. 退出系统安全上下文
 
+ECSManager.TickerCount
+  → 返回已创建的 Ticker 数量，适合工具/诊断代码验证 tickerIndex
+
 结构变更只在查询遍历过程中被禁止；需要在遍历中修改结构时，先记录到系统 `ECB` 或临时列表，遍历结束后再执行。
 
 ECSManager.Dispose()
@@ -1057,7 +1060,7 @@ Ember 深度集成了 MCP，让 AI Agent 能通过 50+ 个 `ember_execute` 命�
 | | |
 |---|---|
 | **🔍 实时侦查** | `get_entity_full`、`query_entities`、`get_archetypes` — 直接透视运行时 ECS 世界 |
-| **📊 性能定位** | `perf_summary` — 一键采样，自动排名最慢系统；`system_status` — 每系统 avg/max Tick 耗时 |
+| **📊 性能定位** | `perf_summary` — 一键采样，支持 `trackingMode="total"` 低扰动总耗时采样或默认 `trackingMode="systems"` 系统分解；`system_status` — 每系统 avg/max Tick 耗时 |
 | **🛠️ 运行时介入** | `add_component`、`set_singleton`、`safe_write_batch` — 不写代码就能修改运行时数据 |
 
 **诊断实战：**

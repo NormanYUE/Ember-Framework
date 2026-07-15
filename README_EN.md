@@ -1019,6 +1019,9 @@ ECSManager.Tick(index, dt)
      3. Auto-playback ECB after system completes successfully
      4. Exit system safety context
 
+ECSManager.TickerCount
+  → Returns the number of created tickers, useful for tools/diagnostics validating tickerIndex
+
 Structural changes are only prohibited during query traversal; when structural modifications
 are needed mid-iteration, record them to the system `ECB` or a temporary list first, then
 execute after iteration finishes.
@@ -1059,7 +1062,7 @@ Ember deeply integrates MCP, allowing AI agents to read and write the running Un
 | | |
 |---|---|
 | **🔍 Live Inspection** | `get_entity_full`, `query_entities`, `get_archetypes` — see inside the runtime ECS world |
-| **📊 Performance Profiling** | `perf_summary` — one-click sampling with automatic slowest-system ranking; `system_status` — per-system avg/max Tick times |
+| **📊 Performance Profiling** | `perf_summary` — one-click sampling with `trackingMode="total"` for low-intrusion total timing or default `trackingMode="systems"` for per-system breakdown; `system_status` — per-system avg/max Tick times |
 | **🛠️ Runtime Intervention** | `add_component`, `set_singleton`, `safe_write_batch` — modify runtime data without writing code |
 
 **Diagnostic in Action:**
