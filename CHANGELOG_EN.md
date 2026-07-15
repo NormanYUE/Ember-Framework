@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.1.2] — SystemTicker Parallel Hot Path Optimization
+
+### Perf
+- **TickParallelLayer safety call short-circuit**: `GetAccessDeclaration` + 4 out params + mask overload of `BeginTick` are skipped when `EMBER_ENABLE_SAFETY_CHECKS` is off, saving 1 is-cast + 4 ComponentMask copies per system per frame.
+- **TickSystemAt hot path streamlined**: serial systems no longer evaluate `GetAccessDeclaration` per frame (when `#if EMBER_SAFETY_CHECKS` off, simple overloads only), reducing framework-side declaration query overhead for InteractionBuild and similar heavy serial systems.
+
+### Fixed
+- **BeginSystemExecution / BeginTick exception leak**: `worldSystemEntered` was not set to true when `context.BeginTick` failed, causing finally to skip `EndSystemExecution`, leaving WorldSafety system scope dangling. Now WorldSafety is no longer polluted on partial failures.
+
 ## [1.1.1] — Row/Pair Access Cache and Stability Fix
 
 ### Changed

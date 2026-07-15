@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.1.2] — SystemTicker 并行热路径优化
+
+### Perf
+- **TickParallelLayer 安全调用短路**：`GetAccessDeclaration` + 4 out 参数 + mask 版 `BeginTick` 在 `EMBER_ENABLE_SAFETY_CHECKS` 关闭时不再走无用的类型声明查询与赋值，每系统每帧省 1 次 is-cast + 4 个 ComponentMask 拷贝。
+- **TickSystemAt 热路径精简**：串行系统每帧不再走 `GetAccessDeclaration`（`#if EMBER_SAFETY_CHECKS` 关闭时仅用简单重载），减少 InteractionBuild 等串行系统框架端的声明查询开销。
+
+### Fixed
+- **BeginSystemExecution / BeginTick 异常泄漏**：`worldSystemEntered` 在 `context.BeginTick` 失败时未置 true 导致 finally 跳过 EndSystemExecution 残留系统上下文。修复后 WorldSafety 不再被污染。
+
 ## [1.1.1] — Row/Pair 访问缓存与稳定性修复
 
 ### Changed
