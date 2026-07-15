@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.1.1] — Row/Pair 访问缓存与稳定性修复
+
+### Changed
+- **QueryRow / ChunkRowRef 热路径**：逐 row 读写不再重复走 `Chunk.GetComponent<T>()` 的 layout offset 查询，改为复用 `CompiledQueryCore` 共享的列缓存。
+- **SystemChunk 列访问缓存**：`SystemChunk.Read/Write<T>` 复用 query 级列缓存，减少系统 chunk 遍历中的重复 offset/base pointer 解析。
+
+### Fixed
+- **缓存列访问 disposed guard**：列缓存命中后仍会检查 chunk 是否已释放，避免逃逸的 row/ref 在 World dispose 后绕过稳定性检查并触碰旧 native pointer。
+
 ## [1.1.0] — 热路径与诊断采样优化
 
 ### Added

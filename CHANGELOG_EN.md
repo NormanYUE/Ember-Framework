@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.1.1] — Row/Pair Access Cache and Stability Fix
+
+### Changed
+- **QueryRow / ChunkRowRef hot path**: per-row reads and writes no longer repeat `Chunk.GetComponent<T>()` layout offset lookup; they reuse the column cache shared by `CompiledQueryCore`.
+- **SystemChunk column access cache**: `SystemChunk.Read/Write<T>` now reuse the query-level column cache, reducing repeated offset/base pointer resolution during system chunk iteration.
+
+### Fixed
+- **Cached column disposed guard**: cached column hits still validate that the chunk is alive, preventing escaped row/ref values from bypassing stability checks and touching stale native pointers after World disposal.
+
 ## [1.1.0] — Hot Path and Diagnostic Sampling Optimizations
 
 ### Added
