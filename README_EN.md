@@ -22,7 +22,7 @@
     }
   ],
   "dependencies": {
-    "com.ember.ecs": "0.12.2"
+    "com.ember.ecs": "1.0.1"
   }
 }
 ```
@@ -882,6 +882,28 @@ manager.Start();
 
 Registration order is execution order. `SystemGroup` allows you to clearly organize the system hierarchy while maintaining precise execution order control.
 
+### 11.4 Reusable System Lists (SystemProfile)
+
+`SystemProfile` describes a copyable system list that can be edited with add/remove/replace operations. It is useful for "base gameplay profile + test/platform/mode variants"; `SystemGroup` remains the better fit for fixed code-side composition and nested expansion.
+
+```csharp
+var baseProfile = new SystemProfile()
+    .Add<PhysicsSystem>()
+    .Add<MovementSystem>()
+    .Add<DamageSystem>();
+
+var debugProfile = baseProfile.Copy()
+    .InsertAfter<DamageSystem, DebugDrawSystem>()
+    .Replace<MovementSystem, DeterministicMovementSystem>();
+
+manager.GetTicker(updateIdx).ApplyProfile(debugProfile);
+manager.Start();
+```
+
+`ApplyProfile` constructs all systems in the profile before registering them into the ticker, so construction failures do not leave partially registered ticker state. `SystemProfile` does not accept `SystemGroup` entries directly; expand groups into leaf systems before adding them to a profile.
+
+Tooling and editor paths can use `ticker.Register(typeof(MySystem))` for dynamic registration. Regular runtime code should still prefer `Register<T>()`; if `Register(Type)` is used in IL2CPP + managed stripping builds, the consuming project must preserve the target system's public parameterless constructor.
+
 ---
 
 ## 12. Performance and Diagnostics
@@ -1019,6 +1041,9 @@ ECSManager.Tick(index, dt)
      3. Auto-playback ECB after system completes successfully
      4. Exit system safety context
 
+ECSManager.TickerCount
+  → Returns the number of created tickers, useful for tools/diagnostics validating tickerIndex
+
 Structural changes are only prohibited during query traversal; when structural modifications
 are needed mid-iteration, record them to the system `ECB` or a temporary list first, then
 execute after iteration finishes.
@@ -1059,7 +1084,7 @@ Ember deeply integrates MCP, allowing AI agents to read and write the running Un
 | | |
 |---|---|
 | **🔍 Live Inspection** | `get_entity_full`, `query_entities`, `get_archetypes` — see inside the runtime ECS world |
-| **📊 Performance Profiling** | `perf_summary` — one-click sampling with automatic slowest-system ranking; `system_status` — per-system avg/max Tick times |
+| **📊 Performance Profiling** | `perf_summary` — one-click sampling with `trackingMode="total"` for low-intrusion total timing or default `trackingMode="systems"` for per-system breakdown; `system_status` — per-system avg/max Tick times |
 | **🛠️ Runtime Intervention** | `add_component`, `set_singleton`, `safe_write_batch` — modify runtime data without writing code |
 
 **Diagnostic in Action:**
@@ -1086,7 +1111,7 @@ AI Client            MCP Server           Unity Editor
 ```
 
 - **EmberBridge**: A TCP server inside the Unity Editor that automatically scans ports 9090-9099 for an available one, dispatches requests to the main thread for execution, and returns results over TCP. The Bridge writes `~/.ember/ember-status-{projectHash}.json` with the current port, project root, `ready/reloading/port_busy` state, and heartbeat timestamp
-- **MCP Server** (`Ember.Mcp.Server.dll`): A standalone .NET console application serving as the standard MCP protocol adaptation layer between the AI client and Unity. Before every `ember_execute` call, it rereads the project status file from `--project-root` and ensures the Bridge is connected; Unity reloads, port changes, and initially disconnected sessions recover automatically
+- **MCP Server** (`ember-mcp`): A .NET console application installed as the `Ember.Mcp.Server` NuGet global tool, serving as the standard MCP protocol adaptation layer between the AI client and Unity. The server discovers Unity Bridge instances from `~/.ember/ember-status-{projectHash}.json`; Unity reloads, port changes, and initially disconnected sessions recover automatically. `Tools~/Ember.Mcp.Server.dll` remains only as a transition fallback
 - **Security model**: Write access is enforced on the Unity side by command type and Play Mode state. Read operations can run in Edit Mode; creating/destroying entities, adding/removing components, and writing components require Play Mode.
 
 ### 14.2 Installation and Configuration
@@ -1105,40 +1130,97 @@ Click **`Start`** to begin TCP listening, **`Stop`** to shut down. If you want t
 
 > The Bridge runs only in the Unity Editor. Read operations do not require Play Mode, but write operations (create/destroy entities, add/remove components) must be performed in Play Mode.
 
-#### 14.2.2 AI Client Configuration
+#### 14.2.2 Environment Requirements
 
-In the **`Client Setup`** foldout, you can install/uninstall MCP configurations for AI clients with one click:
+`Ember.Mcp.Server` is a .NET global tool. The current target framework is **.NET 9**. Before installing or running it, make sure the environment provides:
 
-- **Claude Code** → `.mcp.json` (project root)
-- **Codex** → `.codex/config.toml`
+| Dependency | Requirement |
+|------------|-------------|
+| Unity | `com.ember.ecs` installed and EmberBridge running in the Unity Editor |
+| .NET | .NET 9 SDK or Runtime installed; `dotnet --info` should show a .NET 9 runtime |
+| PATH | `ember-mcp` is in the global tool directory, usually `~/.dotnet/tools` |
+| Non-interactive launch | GUI clients such as Codex, Claude Code, or OpenCode may not read shell startup files; set `DOTNET_ROOT` and `PATH` explicitly when needed |
 
-After clicking `Install`, the window automatically generates a configuration pointing to `Tools~/Ember.Mcp.Server.dll`. When the package is updated (git hash in the Tools~ path changes), the window also auto-repairs stale configuration paths when opened.
+Common macOS/Linux setup:
 
-You can also edit the configuration file manually. Example for Claude Code:
-
-```json
-{
-  "mcpServers": {
-    "ember": {
-      "command": "dotnet",
-      "args": [
-        "exec",
-        "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll",
-        "--project-root",
-        "/path/to/UnityProject"
-      ]
-    }
-  }
-}
+```bash
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
 ```
+
+If the AI client is not launched from a shell, set equivalent environment variables in the client's MCP server configuration, or use the absolute path to `ember-mcp`, for example `~/.dotnet/tools/ember-mcp`.
+
+#### 14.2.3 MCP Server Installation
+
+Install the global MCP Server first:
+
+```bash
+dotnet tool install -g Ember.Mcp.Server
+```
+
+Update an existing install:
+
+```bash
+dotnet tool update -g Ember.Mcp.Server
+```
+
+Verify the installation:
+
+```bash
+ember-mcp --version
+ember-mcp list-instances
+```
+
+`ember-mcp --version` should print the current package version. `list-instances` reads `~/.ember/ember-status-*.json` and lists running Unity Bridge instances. An empty list usually means the Unity MCP window has not started the Bridge.
+
+#### 14.2.4 AI Client Configuration
+
+AI client configuration is managed by each client. Example for Codex:
+
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
+```
+
+If the client cannot inherit the shell environment, add environment variables to the client config when supported:
+
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
+
+[mcp_servers.ember.env]
+DOTNET_ROOT = "/Users/your-name/.dotnet"
+PATH = "/Users/your-name/.dotnet:/Users/your-name/.dotnet/tools:/usr/bin:/bin:/usr/sbin:/sbin"
+```
+
+The Ember MCP window no longer writes AI-client configuration. If an existing configuration still launches `Tools~/Ember.Mcp.Server.dll`, migrate it manually to the global `ember-mcp stdio` command above.
+
+#### 14.2.5 Project-Level Skills
+
+In the Ember MCP window **`Skills`** foldout, use the `Install For` dropdown to choose the target AI tool, then click `Install/Reinstall` for each Skill.
+
+| AI Tool | Project-level install directory |
+|---------|---------------------------------|
+| Codex | `.agents/skills/<skill>/SKILL.md` |
+| Claude Code | `.claude/skills/<skill>/SKILL.md` |
+| OpenCode | `.opencode/skills/<skill>/SKILL.md` |
+
+Skills are project-level files intended to be committed and shared with the Unity project. Restart the selected AI client after installation.
 
 **Launch arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `--project-root <path>` | Unity project root. Recommended: the MCP Server uses it to read the matching project status file and avoid connecting to another Unity project |
+| `stdio` | Run as an MCP stdio server. This is the default mode for AI clients |
+| `list-instances` | List currently available Unity Bridge instances as JSON |
+| `--project-root <path>` | Optional target selector. Specifies the Unity project root to avoid ambiguity when multiple Unity projects are open |
+| `--project-hash <hash>` | Optional target selector. Specifies the `projectHash` from the Bridge status file |
 | `--port <n>` | Manually specify a port. Usually unnecessary; use only when the status file is unavailable and the port is known |
-| `--allow-write` | Legacy compatibility flag. It no longer controls permissions; writes are guarded by Unity-side Play Mode and command type checks |
+| `--status-dir <path>` | Override the Bridge status directory. Defaults to `~/.ember` |
 
 ### 14.3 Command Reference (54 commands via `ember_execute`)
 
@@ -1185,8 +1267,10 @@ A typical interaction flow in an AI client:
 | "No fresh Ember bridge status was found" | Bridge not started, status file stale, or `--project-root` points to the wrong project | `Window > Ember > MCP` → Start, and confirm `--project-root` is the Unity project root |
 | "Unity bridge is reloading" | Unity is switching Play Mode or doing a domain reload | Wait until the Bridge returns to `ready`; the MCP Server reconnects automatically |
 | "Write operations require Play Mode" | Write operations must be in Play Mode | Enter Play Mode |
+| "You must install .NET to run this application" | The AI client starts `ember-mcp` without a discoverable .NET runtime or `DOTNET_ROOT` | Install .NET 9 and set `DOTNET_ROOT` / `PATH` in the client configuration |
+| `ember-mcp: command not found` | `~/.dotnet/tools` is not in the client process PATH | Add `~/.dotnet/tools` to PATH, or use the absolute path to `ember-mcp` in the config |
 | Client hangs / unresponsive after launch | Port conflict or stale connection | The Bridge retries the last successful port first, then 9090-9099; restart the Ember MCP window if needed |
-| Configuration broken after package update | Tools~ path hash changed | Window `AutoUpdateConfigPaths()` auto-repairs; reopen the `Ember MCP` window |
+| Configuration broken after package update | Client still points to an old `Tools~` DLL path | Change the config to global `command = "ember-mcp"` and `args = ["stdio"]`, then restart the AI client |
 
 #### Log Diagnostics
 

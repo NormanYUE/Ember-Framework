@@ -22,14 +22,12 @@
     }
   ],
   "dependencies": {
-    "com.ember.ecs": "0.12.2"
+    "com.ember.ecs": "1.0.1"
   }
 }
 ```
 
 3. 保存文件，Unity 会自动下载并安装
-
-> 最新版本：0.12.2 — 支持 OpenUPM 包名安装
 
 ### 方式二：通过 Git URL 安装
 
@@ -884,6 +882,28 @@ manager.Start();
 
 注册顺序即执行顺序。通过 `SystemGroup` 组合可以清晰地组织系统层级，同时保持精确的执行顺序控制。
 
+### 11.4 可复用系统清单（SystemProfile）
+
+`SystemProfile` 用于描述一组可复制、可增删替换的系统。它适合做“基础玩法清单 + 测试/平台/模式差异”的组合；`SystemGroup` 更适合固定代码组合和嵌套展开。
+
+```csharp
+var baseProfile = new SystemProfile()
+    .Add<PhysicsSystem>()
+    .Add<MovementSystem>()
+    .Add<DamageSystem>();
+
+var debugProfile = baseProfile.Copy()
+    .InsertAfter<DamageSystem, DebugDrawSystem>()
+    .Replace<MovementSystem, DeterministicMovementSystem>();
+
+manager.GetTicker(updateIdx).ApplyProfile(debugProfile);
+manager.Start();
+```
+
+`ApplyProfile` 会先完整构造 profile 内的系统，再注册到 ticker，避免构造失败后留下部分注册状态。`SystemProfile` 不直接接受 `SystemGroup`；需要复用组合时，先把 group 展开成叶子系统再加入 profile。
+
+工具或编辑器路径可以使用 `ticker.Register(typeof(MySystem))` 动态注册系统。普通运行时代码仍优先使用 `Register<T>()`；如果在 IL2CPP + managed stripping 环境中使用 `Register(Type)`，消费工程需要保留目标系统的 public 无参构造函数。
+
 ---
 
 ## 12. 性能与诊断
@@ -1021,6 +1041,9 @@ ECSManager.Tick(index, dt)
      3. 系统成功结束后自动回放 ECB
      4. 退出系统安全上下文
 
+ECSManager.TickerCount
+  → 返回已创建的 Ticker 数量，适合工具/诊断代码验证 tickerIndex
+
 结构变更只在查询遍历过程中被禁止；需要在遍历中修改结构时，先记录到系统 `ECB` 或临时列表，遍历结束后再执行。
 
 ECSManager.Dispose()
@@ -1059,7 +1082,7 @@ Ember 深度集成了 MCP，让 AI Agent 能通过 50+ 个 `ember_execute` 命�
 | | |
 |---|---|
 | **🔍 实时侦查** | `get_entity_full`、`query_entities`、`get_archetypes` — 直接透视运行时 ECS 世界 |
-| **📊 性能定位** | `perf_summary` — 一键采样，自动排名最慢系统；`system_status` — 每系统 avg/max Tick 耗时 |
+| **📊 性能定位** | `perf_summary` — 一键采样，支持 `trackingMode="total"` 低扰动总耗时采样或默认 `trackingMode="systems"` 系统分解；`system_status` — 每系统 avg/max Tick 耗时 |
 | **🛠️ 运行时介入** | `add_component`、`set_singleton`、`safe_write_batch` — 不写代码就能修改运行时数据 |
 
 **诊断实战：**
@@ -1086,7 +1109,7 @@ AI Client            MCP Server           Unity Editor
 ```
 
 - **EmberBridge**：Unity Editor 内的 TCP 服务器，在 9090-9099 范围内自动扫描可用端口，将请求分派到主线程执行，结果通过 TCP 返回。Bridge 会写入 `~/.ember/ember-status-{projectHash}.json`，记录当前端口、项目根目录、`ready/reloading/port_busy` 状态和心跳时间
-- **MCP Server**（`Ember.Mcp.Server.dll`）：独立的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。每次 `ember_execute` 前都会按 `--project-root` 重新读取状态文件并确保连接；Unity reload、端口变化或首次未连接时会自动恢复
+- **MCP Server**（`ember-mcp`）：以 `Ember.Mcp.Server` NuGet global tool 形式安装的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。Server 会发现 `~/.ember/ember-status-{projectHash}.json` 中的 Unity Bridge 实例；Unity reload、端口变化或首次未连接时会自动恢复。`Tools~/Ember.Mcp.Server.dll` 仅作为过渡 fallback 保留
 - **安全模型**：写操作由 Unity 端按命令类型和 Play Mode 状态控制。读操作可在 Edit Mode 执行；创建/销毁实体、增删组件、写组件等写操作必须在 Play Mode 下执行
 
 ### 14.2 安装与配置
@@ -1105,40 +1128,97 @@ AI Client            MCP Server           Unity Editor
 
 > Bridge 仅在 Unity Editor 中运行。读操作无需 Play Mode，但写操作（创建/销毁实体、增删组件）必须在 Play Mode 下执行。
 
-#### 14.2.2 AI 客户端配置
+#### 14.2.2 环境依赖
 
-在 **`Client Setup`** 折叠区，可以一键安装/卸载 AI 客户端的 MCP 配置：
+`Ember.Mcp.Server` 是 .NET global tool，当前目标框架为 **.NET 9**。安装和运行前需要满足：
 
-- **Claude Code** → `.mcp.json`（项目根目录）
-- **Codex** → `.codex/config.toml`
+| 依赖 | 要求 |
+|------|------|
+| Unity | 安装并启用 `com.ember.ecs` 包，Unity Editor 中运行 EmberBridge |
+| .NET | 安装 .NET 9 SDK 或 Runtime；执行 `dotnet --info` 应能看到 .NET 9 runtime |
+| PATH | `ember-mcp` 位于 global tool 目录，默认是 `~/.dotnet/tools` |
+| 非交互启动 | Codex / Claude Code / OpenCode 等 GUI 客户端可能不读取 shell 配置，必要时显式设置 `DOTNET_ROOT` 和 `PATH` |
 
-点击 `Install` 后，窗口会自动生成指向 `Tools~/Ember.Mcp.Server.dll` 的配置。包更新后（Tools~ 路径中的 git hash 变化），窗口打开时也会自动修复过期的配置路径。
+macOS/Linux 常见配置：
 
-也可以手动编辑配置文件。以 Claude Code 为例：
-
-```json
-{
-  "mcpServers": {
-    "ember": {
-      "command": "dotnet",
-      "args": [
-        "exec",
-        "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll",
-        "--project-root",
-        "/path/to/UnityProject"
-      ]
-    }
-  }
-}
+```bash
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
 ```
+
+如果 AI 客户端不是从 shell 启动，请在客户端的 MCP server 配置里设置同等环境变量，或把 `command` 写成 `ember-mcp` 的绝对路径，例如 `~/.dotnet/tools/ember-mcp`。
+
+#### 14.2.3 安装 MCP Server
+
+先安装全局 MCP Server：
+
+```bash
+dotnet tool install -g Ember.Mcp.Server
+```
+
+已安装时更新：
+
+```bash
+dotnet tool update -g Ember.Mcp.Server
+```
+
+验证安装：
+
+```bash
+ember-mcp --version
+ember-mcp list-instances
+```
+
+`ember-mcp --version` 应输出当前包版本；`list-instances` 会读取 `~/.ember/ember-status-*.json` 并列出正在运行的 Unity Bridge。列表为空通常表示 Unity MCP 窗口未启动 Bridge。
+
+#### 14.2.4 AI 客户端配置
+
+AI 客户端配置使用各客户端自己的配置系统。以 Codex 为例：
+
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
+```
+
+如果客户端无法继承 shell 环境，可以把环境变量写入客户端配置（具体语法以客户端为准）：
+
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
+
+[mcp_servers.ember.env]
+DOTNET_ROOT = "/Users/your-name/.dotnet"
+PATH = "/Users/your-name/.dotnet:/Users/your-name/.dotnet/tools:/usr/bin:/bin:/usr/sbin:/sbin"
+```
+
+Ember MCP 窗口不再写入客户端配置；配置旧的 `Tools~/Ember.Mcp.Server.dll` 启动路径时，请手动迁移为上面的全局 `ember-mcp stdio` 命令。
+
+#### 14.2.5 项目级 Skills 安装
+
+在 Ember MCP 窗口的 **`Skills`** 折叠区，用 `Install For` 下拉菜单选择目标 AI 工具，然后点击每个 Skill 的 `Install/Reinstall`。
+
+| AI 工具 | 项目级安装目录 |
+|---------|----------------|
+| Codex | `.agents/skills/<skill>/SKILL.md` |
+| Claude Code | `.claude/skills/<skill>/SKILL.md` |
+| OpenCode | `.opencode/skills/<skill>/SKILL.md` |
+
+Skills 是项目级文件，适合随 Unity 项目提交和共享；安装后重启对应 AI 客户端让新 Skill 生效。
 
 **启动参数：**
 
 | 参数 | 说明 |
 |------|------|
-| `--project-root <path>` | 指定 Unity 项目根目录。推荐配置，MCP Server 用它读取对应项目的状态文件并避免连到其他 Unity 项目 |
+| `stdio` | 以 MCP stdio server 模式运行。AI 客户端默认使用 |
+| `list-instances` | 列出当前可用 Unity Bridge 实例，返回 JSON |
+| `--project-root <path>` | 可选定向参数。指定 Unity 项目根目录，避免多个 Unity 项目同时打开时产生歧义 |
+| `--project-hash <hash>` | 可选定向参数。指定 Bridge status 中的 `projectHash` |
 | `--port <n>` | 手动指定端口。通常不需要；只有在状态文件不可用且明确知道端口时使用 |
-| `--allow-write` | 旧参数，保留兼容但已不再控制权限。写操作由 Unity 端 Play Mode 和命令类型判断 |
+| `--status-dir <path>` | 指定 Bridge status 文件目录，默认 `~/.ember` |
 
 ### 14.3 Command Reference (54 commands via `ember_execute`)
 
@@ -1185,8 +1265,10 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 | "No fresh Ember bridge status was found" | Bridge 未启动、状态文件过期，或 `--project-root` 指向了错误项目 | `Window > Ember > MCP` → Start，并确认配置里的 `--project-root` 是 Unity 项目根目录 |
 | "Unity bridge is reloading" | Unity 正在切换 Play Mode 或 domain reload | 等待 Bridge 恢复到 `ready` 后重试；MCP Server 会自动重连 |
 | "Write operations require Play Mode" | 写操作必须在 Play Mode 执行 | 进入 Play Mode |
+| "You must install .NET to run this application" | AI 客户端启动 `ember-mcp` 时找不到 .NET runtime 或 `DOTNET_ROOT` | 安装 .NET 9，并在客户端配置里设置 `DOTNET_ROOT` / `PATH` |
+| `ember-mcp: command not found` | `~/.dotnet/tools` 不在客户端进程的 PATH 中 | 把 `~/.dotnet/tools` 加入 PATH，或在配置里使用 `ember-mcp` 的绝对路径 |
 | 客户端启动后卡住 / 无响应 | 端口冲突或旧连接残留 | Bridge 会优先复用上次端口并在 9090-9099 内重试；必要时重启 Ember MCP 窗口 |
-| 包更新后配置失效 | Tools~ 路径中的 hash 变化 | 窗口 `AutoUpdateConfigPaths()` 自动修复，重启 `Ember MCP` 窗口即可 |
+| 包更新后配置失效 | 客户端仍指向旧的 `Tools~` DLL 路径 | 将配置改为全局 `command = "ember-mcp"`、`args = ["stdio"]`，然后重启 AI 客户端 |
 
 #### 日志诊断
 
