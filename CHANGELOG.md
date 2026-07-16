@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.4.1] — Unity Bridge PlayMode 自动恢复
+
+### Fixed
+- **Unity Bridge 手动启动恢复**：手动启动 Ember MCP Bridge 后会持久化“保持运行”意图。停止或重启 PlayMode 触发 Bridge 暂停后，只要用户没有手动 Stop，进入稳定 Play/Edit 状态时会自动重新启动，避免每次 PlayMode 切换后都需要手动启动 Server。
+
 ## [1.4.0] — MCP 窗口与项目级 Skills
 
 ### Added

@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.4.1] — Unity Bridge PlayMode Auto-Recovery
+
+### Fixed
+- **Unity Bridge manual-start recovery**: Starting the Ember MCP Bridge manually now persists a "keep running" intent. After PlayMode stop/restart temporarily shuts down the Bridge, it automatically restarts once Unity reaches a stable Play/Edit state unless the user explicitly clicks Stop.
+
 ## [1.4.0] — MCP Window and Project-Level Skills
 
 ### Added
