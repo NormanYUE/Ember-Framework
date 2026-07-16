@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.2.0] — SystemProfile 系统组合 API
+
+### Added
+- **SystemProfile**：新增可复用、可复制的系统清单 API，支持 `Add`、`Remove`、`InsertBefore`、`InsertAfter` 和 `Replace`，适合在基础玩法 profile 上派生测试/变体配置。
+- **SystemTicker.ApplyProfile**：新增 profile 应用入口，先完整构造 profile 内系统，再一次性注册到 ticker，避免构造失败后留下部分注册状态。
+- **SystemTicker.Register(Type)**：新增运行时类型注册入口，供 Editor、工具链和动态配置使用；普通玩家代码仍优先使用 `Register<T>()`，IL2CPP stripping 场景需由消费工程保留目标系统构造函数。
+
+### Changed
+- **SystemProfile / SystemGroup 分工**：`SystemGroup` 继续用于代码内固定组合和嵌套展开；`SystemProfile` 用于可复制、可增删替换的系统清单，不支持直接包含 `SystemGroup`，需要先展开为叶子系统。
+
 ## [1.1.2] — SystemTicker 并行热路径优化
 
 ### Perf

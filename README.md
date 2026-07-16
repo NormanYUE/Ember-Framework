@@ -882,6 +882,28 @@ manager.Start();
 
 注册顺序即执行顺序。通过 `SystemGroup` 组合可以清晰地组织系统层级，同时保持精确的执行顺序控制。
 
+### 11.4 可复用系统清单（SystemProfile）
+
+`SystemProfile` 用于描述一组可复制、可增删替换的系统。它适合做“基础玩法清单 + 测试/平台/模式差异”的组合；`SystemGroup` 更适合固定代码组合和嵌套展开。
+
+```csharp
+var baseProfile = new SystemProfile()
+    .Add<PhysicsSystem>()
+    .Add<MovementSystem>()
+    .Add<DamageSystem>();
+
+var debugProfile = baseProfile.Copy()
+    .InsertAfter<DamageSystem, DebugDrawSystem>()
+    .Replace<MovementSystem, DeterministicMovementSystem>();
+
+manager.GetTicker(updateIdx).ApplyProfile(debugProfile);
+manager.Start();
+```
+
+`ApplyProfile` 会先完整构造 profile 内的系统，再注册到 ticker，避免构造失败后留下部分注册状态。`SystemProfile` 不直接接受 `SystemGroup`；需要复用组合时，先把 group 展开成叶子系统再加入 profile。
+
+工具或编辑器路径可以使用 `ticker.Register(typeof(MySystem))` 动态注册系统。普通运行时代码仍优先使用 `Register<T>()`；如果在 IL2CPP + managed stripping 环境中使用 `Register(Type)`，消费工程需要保留目标系统的 public 无参构造函数。
+
 ---
 
 ## 12. 性能与诊断

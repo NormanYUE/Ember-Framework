@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.2.0] — SystemProfile Composition API
+
+### Added
+- **SystemProfile**: Adds a reusable and copyable system list API with `Add`, `Remove`, `InsertBefore`, `InsertAfter`, and `Replace`, useful for deriving test or gameplay variants from a base profile.
+- **SystemTicker.ApplyProfile**: Adds a profile application entry point that constructs all profile systems before registering them into the ticker, avoiding partially registered ticker state if construction fails.
+- **SystemTicker.Register(Type)**: Adds runtime type registration for editor, tooling, and dynamic configuration paths. Regular player code should still prefer `Register<T>()`; IL2CPP stripping scenarios must preserve the target system constructors in the consuming project.
+
+### Changed
+- **SystemProfile / SystemGroup split**: `SystemGroup` remains the fixed code-side composition and nesting primitive; `SystemProfile` is for copyable system lists that can be edited by add/remove/replace operations. Profiles do not accept `SystemGroup` entries directly; expand groups into leaf systems first.
+
 ## [1.1.2] — SystemTicker Parallel Hot Path Optimization
 
 ### Perf

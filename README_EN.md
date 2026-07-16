@@ -882,6 +882,28 @@ manager.Start();
 
 Registration order is execution order. `SystemGroup` allows you to clearly organize the system hierarchy while maintaining precise execution order control.
 
+### 11.4 Reusable System Lists (SystemProfile)
+
+`SystemProfile` describes a copyable system list that can be edited with add/remove/replace operations. It is useful for "base gameplay profile + test/platform/mode variants"; `SystemGroup` remains the better fit for fixed code-side composition and nested expansion.
+
+```csharp
+var baseProfile = new SystemProfile()
+    .Add<PhysicsSystem>()
+    .Add<MovementSystem>()
+    .Add<DamageSystem>();
+
+var debugProfile = baseProfile.Copy()
+    .InsertAfter<DamageSystem, DebugDrawSystem>()
+    .Replace<MovementSystem, DeterministicMovementSystem>();
+
+manager.GetTicker(updateIdx).ApplyProfile(debugProfile);
+manager.Start();
+```
+
+`ApplyProfile` constructs all systems in the profile before registering them into the ticker, so construction failures do not leave partially registered ticker state. `SystemProfile` does not accept `SystemGroup` entries directly; expand groups into leaf systems before adding them to a profile.
+
+Tooling and editor paths can use `ticker.Register(typeof(MySystem))` for dynamic registration. Regular runtime code should still prefer `Register<T>()`; if `Register(Type)` is used in IL2CPP + managed stripping builds, the consuming project must preserve the target system's public parameterless constructor.
+
 ---
 
 ## 12. Performance and Diagnostics
