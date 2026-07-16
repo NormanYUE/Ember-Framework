@@ -1128,7 +1128,27 @@ AI Client            MCP Server           Unity Editor
 
 > Bridge 仅在 Unity Editor 中运行。读操作无需 Play Mode，但写操作（创建/销毁实体、增删组件）必须在 Play Mode 下执行。
 
-#### 14.2.2 AI 客户端配置
+#### 14.2.2 环境依赖
+
+`Ember.Mcp.Server` 是 .NET global tool，当前目标框架为 **.NET 9**。安装和运行前需要满足：
+
+| 依赖 | 要求 |
+|------|------|
+| Unity | 安装并启用 `com.ember.ecs` 包，Unity Editor 中运行 EmberBridge |
+| .NET | 安装 .NET 9 SDK 或 Runtime；执行 `dotnet --info` 应能看到 .NET 9 runtime |
+| PATH | `ember-mcp` 位于 global tool 目录，默认是 `~/.dotnet/tools` |
+| 非交互启动 | Codex / Claude Code / OpenCode 等 GUI 客户端可能不读取 shell 配置，必要时显式设置 `DOTNET_ROOT` 和 `PATH` |
+
+macOS/Linux 常见配置：
+
+```bash
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
+```
+
+如果 AI 客户端不是从 shell 启动，请在客户端的 MCP server 配置里设置同等环境变量，或把 `command` 写成 `ember-mcp` 的绝对路径，例如 `~/.dotnet/tools/ember-mcp`。
+
+#### 14.2.3 安装 MCP Server
 
 先安装全局 MCP Server：
 
@@ -1142,6 +1162,17 @@ dotnet tool install -g Ember.Mcp.Server
 dotnet tool update -g Ember.Mcp.Server
 ```
 
+验证安装：
+
+```bash
+ember-mcp --version
+ember-mcp list-instances
+```
+
+`ember-mcp --version` 应输出当前包版本；`list-instances` 会读取 `~/.ember/ember-status-*.json` 并列出正在运行的 Unity Bridge。列表为空通常表示 Unity MCP 窗口未启动 Bridge。
+
+#### 14.2.4 AI 客户端配置
+
 AI 客户端配置使用各客户端自己的配置系统。以 Codex 为例：
 
 ```toml
@@ -1151,9 +1182,22 @@ args = ["stdio"]
 startup_timeout_sec = 10
 ```
 
+如果客户端无法继承 shell 环境，可以把环境变量写入客户端配置（具体语法以客户端为准）：
+
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
+
+[mcp_servers.ember.env]
+DOTNET_ROOT = "/Users/your-name/.dotnet"
+PATH = "/Users/your-name/.dotnet:/Users/your-name/.dotnet/tools:/usr/bin:/bin:/usr/sbin:/sbin"
+```
+
 Ember MCP 窗口不再写入客户端配置；配置旧的 `Tools~/Ember.Mcp.Server.dll` 启动路径时，请手动迁移为上面的全局 `ember-mcp stdio` 命令。
 
-#### 14.2.3 项目级 Skills 安装
+#### 14.2.5 项目级 Skills 安装
 
 在 Ember MCP 窗口的 **`Skills`** 折叠区，用 `Install For` 下拉菜单选择目标 AI 工具，然后点击每个 Skill 的 `Install/Reinstall`。
 
@@ -1221,6 +1265,8 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 | "No fresh Ember bridge status was found" | Bridge 未启动、状态文件过期，或 `--project-root` 指向了错误项目 | `Window > Ember > MCP` → Start，并确认配置里的 `--project-root` 是 Unity 项目根目录 |
 | "Unity bridge is reloading" | Unity 正在切换 Play Mode 或 domain reload | 等待 Bridge 恢复到 `ready` 后重试；MCP Server 会自动重连 |
 | "Write operations require Play Mode" | 写操作必须在 Play Mode 执行 | 进入 Play Mode |
+| "You must install .NET to run this application" | AI 客户端启动 `ember-mcp` 时找不到 .NET runtime 或 `DOTNET_ROOT` | 安装 .NET 9，并在客户端配置里设置 `DOTNET_ROOT` / `PATH` |
+| `ember-mcp: command not found` | `~/.dotnet/tools` 不在客户端进程的 PATH 中 | 把 `~/.dotnet/tools` 加入 PATH，或在配置里使用 `ember-mcp` 的绝对路径 |
 | 客户端启动后卡住 / 无响应 | 端口冲突或旧连接残留 | Bridge 会优先复用上次端口并在 9090-9099 内重试；必要时重启 Ember MCP 窗口 |
 | 包更新后配置失效 | 客户端仍指向旧的 `Tools~` DLL 路径 | 将配置改为全局 `command = "ember-mcp"`、`args = ["stdio"]`，然后重启 AI 客户端 |
 

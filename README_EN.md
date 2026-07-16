@@ -1130,7 +1130,27 @@ Click **`Start`** to begin TCP listening, **`Stop`** to shut down. If you want t
 
 > The Bridge runs only in the Unity Editor. Read operations do not require Play Mode, but write operations (create/destroy entities, add/remove components) must be performed in Play Mode.
 
-#### 14.2.2 AI Client Configuration
+#### 14.2.2 Environment Requirements
+
+`Ember.Mcp.Server` is a .NET global tool. The current target framework is **.NET 9**. Before installing or running it, make sure the environment provides:
+
+| Dependency | Requirement |
+|------------|-------------|
+| Unity | `com.ember.ecs` installed and EmberBridge running in the Unity Editor |
+| .NET | .NET 9 SDK or Runtime installed; `dotnet --info` should show a .NET 9 runtime |
+| PATH | `ember-mcp` is in the global tool directory, usually `~/.dotnet/tools` |
+| Non-interactive launch | GUI clients such as Codex, Claude Code, or OpenCode may not read shell startup files; set `DOTNET_ROOT` and `PATH` explicitly when needed |
+
+Common macOS/Linux setup:
+
+```bash
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
+```
+
+If the AI client is not launched from a shell, set equivalent environment variables in the client's MCP server configuration, or use the absolute path to `ember-mcp`, for example `~/.dotnet/tools/ember-mcp`.
+
+#### 14.2.3 MCP Server Installation
 
 Install the global MCP Server first:
 
@@ -1144,6 +1164,17 @@ Update an existing install:
 dotnet tool update -g Ember.Mcp.Server
 ```
 
+Verify the installation:
+
+```bash
+ember-mcp --version
+ember-mcp list-instances
+```
+
+`ember-mcp --version` should print the current package version. `list-instances` reads `~/.ember/ember-status-*.json` and lists running Unity Bridge instances. An empty list usually means the Unity MCP window has not started the Bridge.
+
+#### 14.2.4 AI Client Configuration
+
 AI client configuration is managed by each client. Example for Codex:
 
 ```toml
@@ -1153,9 +1184,22 @@ args = ["stdio"]
 startup_timeout_sec = 10
 ```
 
+If the client cannot inherit the shell environment, add environment variables to the client config when supported:
+
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
+
+[mcp_servers.ember.env]
+DOTNET_ROOT = "/Users/your-name/.dotnet"
+PATH = "/Users/your-name/.dotnet:/Users/your-name/.dotnet/tools:/usr/bin:/bin:/usr/sbin:/sbin"
+```
+
 The Ember MCP window no longer writes AI-client configuration. If an existing configuration still launches `Tools~/Ember.Mcp.Server.dll`, migrate it manually to the global `ember-mcp stdio` command above.
 
-#### 14.2.3 Project-Level Skills
+#### 14.2.5 Project-Level Skills
 
 In the Ember MCP window **`Skills`** foldout, use the `Install For` dropdown to choose the target AI tool, then click `Install/Reinstall` for each Skill.
 
@@ -1223,6 +1267,8 @@ A typical interaction flow in an AI client:
 | "No fresh Ember bridge status was found" | Bridge not started, status file stale, or `--project-root` points to the wrong project | `Window > Ember > MCP` → Start, and confirm `--project-root` is the Unity project root |
 | "Unity bridge is reloading" | Unity is switching Play Mode or doing a domain reload | Wait until the Bridge returns to `ready`; the MCP Server reconnects automatically |
 | "Write operations require Play Mode" | Write operations must be in Play Mode | Enter Play Mode |
+| "You must install .NET to run this application" | The AI client starts `ember-mcp` without a discoverable .NET runtime or `DOTNET_ROOT` | Install .NET 9 and set `DOTNET_ROOT` / `PATH` in the client configuration |
+| `ember-mcp: command not found` | `~/.dotnet/tools` is not in the client process PATH | Add `~/.dotnet/tools` to PATH, or use the absolute path to `ember-mcp` in the config |
 | Client hangs / unresponsive after launch | Port conflict or stale connection | The Bridge retries the last successful port first, then 9090-9099; restart the Ember MCP window if needed |
 | Configuration broken after package update | Client still points to an old `Tools~` DLL path | Change the config to global `command = "ember-mcp"` and `args = ["stdio"]`, then restart the AI client |
 
