@@ -1144,13 +1144,7 @@ Update an existing install:
 dotnet tool update -g Ember.Mcp.Server
 ```
 
-In the **`Client Setup`** foldout, you can install/uninstall MCP configurations for AI clients with one click:
-
-- **Codex Global** → `~/.codex/config.toml`
-
-After clicking `Install`, the window writes a user-level global configuration. Legacy project-level `Tools~/Ember.Mcp.Server.dll` configurations are migrated to `ember-mcp stdio`.
-
-You can also edit the configuration file manually. Example for Codex:
+AI client configuration is managed by each client. Example for Codex:
 
 ```toml
 [mcp_servers.ember]
@@ -1158,6 +1152,20 @@ command = "ember-mcp"
 args = ["stdio"]
 startup_timeout_sec = 10
 ```
+
+The Ember MCP window no longer writes AI-client configuration. If an existing configuration still launches `Tools~/Ember.Mcp.Server.dll`, migrate it manually to the global `ember-mcp stdio` command above.
+
+#### 14.2.3 Project-Level Skills
+
+In the Ember MCP window **`Skills`** foldout, use the `Install For` dropdown to choose the target AI tool, then click `Install/Reinstall` for each Skill.
+
+| AI Tool | Project-level install directory |
+|---------|---------------------------------|
+| Codex | `.agents/skills/<skill>/SKILL.md` |
+| Claude Code | `.claude/skills/<skill>/SKILL.md` |
+| OpenCode | `.opencode/skills/<skill>/SKILL.md` |
+
+Skills are project-level files intended to be committed and shared with the Unity project. Restart the selected AI client after installation.
 
 **Launch arguments:**
 
@@ -1216,7 +1224,7 @@ A typical interaction flow in an AI client:
 | "Unity bridge is reloading" | Unity is switching Play Mode or doing a domain reload | Wait until the Bridge returns to `ready`; the MCP Server reconnects automatically |
 | "Write operations require Play Mode" | Write operations must be in Play Mode | Enter Play Mode |
 | Client hangs / unresponsive after launch | Port conflict or stale connection | The Bridge retries the last successful port first, then 9090-9099; restart the Ember MCP window if needed |
-| Configuration broken after package update | Tools~ path hash changed | Window `AutoUpdateConfigPaths()` auto-repairs; reopen the `Ember MCP` window |
+| Configuration broken after package update | Client still points to an old `Tools~` DLL path | Change the config to global `command = "ember-mcp"` and `args = ["stdio"]`, then restart the AI client |
 
 #### Log Diagnostics
 

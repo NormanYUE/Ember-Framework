@@ -1142,13 +1142,7 @@ dotnet tool install -g Ember.Mcp.Server
 dotnet tool update -g Ember.Mcp.Server
 ```
 
-在 **`Client Setup`** 折叠区，可以一键安装/卸载 AI 客户端的 MCP 配置：
-
-- **Codex Global** → `~/.codex/config.toml`
-
-点击 `Install` 后，窗口会自动生成用户级全局配置。旧的项目级 `Tools~/Ember.Mcp.Server.dll` 配置会被迁移为 `ember-mcp stdio`。
-
-也可以手动编辑配置文件。以 Codex 为例：
+AI 客户端配置使用各客户端自己的配置系统。以 Codex 为例：
 
 ```toml
 [mcp_servers.ember]
@@ -1156,6 +1150,20 @@ command = "ember-mcp"
 args = ["stdio"]
 startup_timeout_sec = 10
 ```
+
+Ember MCP 窗口不再写入客户端配置；配置旧的 `Tools~/Ember.Mcp.Server.dll` 启动路径时，请手动迁移为上面的全局 `ember-mcp stdio` 命令。
+
+#### 14.2.3 项目级 Skills 安装
+
+在 Ember MCP 窗口的 **`Skills`** 折叠区，用 `Install For` 下拉菜单选择目标 AI 工具，然后点击每个 Skill 的 `Install/Reinstall`。
+
+| AI 工具 | 项目级安装目录 |
+|---------|----------------|
+| Codex | `.agents/skills/<skill>/SKILL.md` |
+| Claude Code | `.claude/skills/<skill>/SKILL.md` |
+| OpenCode | `.opencode/skills/<skill>/SKILL.md` |
+
+Skills 是项目级文件，适合随 Unity 项目提交和共享；安装后重启对应 AI 客户端让新 Skill 生效。
 
 **启动参数：**
 
@@ -1214,7 +1222,7 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 | "Unity bridge is reloading" | Unity 正在切换 Play Mode 或 domain reload | 等待 Bridge 恢复到 `ready` 后重试；MCP Server 会自动重连 |
 | "Write operations require Play Mode" | 写操作必须在 Play Mode 执行 | 进入 Play Mode |
 | 客户端启动后卡住 / 无响应 | 端口冲突或旧连接残留 | Bridge 会优先复用上次端口并在 9090-9099 内重试；必要时重启 Ember MCP 窗口 |
-| 包更新后配置失效 | Tools~ 路径中的 hash 变化 | 窗口 `AutoUpdateConfigPaths()` 自动修复，重启 `Ember MCP` 窗口即可 |
+| 包更新后配置失效 | 客户端仍指向旧的 `Tools~` DLL 路径 | 将配置改为全局 `command = "ember-mcp"`、`args = ["stdio"]`，然后重启 AI 客户端 |
 
 #### 日志诊断
 

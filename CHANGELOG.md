@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.4.0] — MCP 窗口与项目级 Skills
+
+### Added
+- **项目级 Skills 安装目标**：Ember MCP 窗口的 `Skills` 区域新增 AI 工具下拉选择，支持按项目安装到 Codex `.agents/skills`、Claude Code `.claude/skills` 和 OpenCode `.opencode/skills`。
+
+### Changed
+- **MCP 窗口收口**：移除 `Client Setup` 区块，不再通过 Unity 窗口写入 AI 客户端配置。AI 客户端继续使用全局 `ember-mcp stdio` 配置，Unity 窗口只负责 Bridge 状态、Skills 安装、Server 信息和请求日志。
+- **Skill 文档同步**：更新已安装的 Ember Skills 和窗口内嵌 Skills 内容，修正 `AccessBuilder` 单泛型链式写法、`ChunkJobMeta` slot 获取方式、`ComponentMask` mutable struct 语义和发布验收说明。
+
 ## [1.3.0] — 全局 MCP Server 与实例发现
 
 ### Added

@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.4.0] — MCP Window and Project-Level Skills
+
+### Added
+- **Project-level skill install targets**: The Ember MCP window `Skills` section now provides an AI-tool dropdown and installs project-level skills for Codex `.agents/skills`, Claude Code `.claude/skills`, and OpenCode `.opencode/skills`.
+
+### Changed
+- **MCP window simplification**: Removes the `Client Setup` section. The Unity window no longer writes AI-client configuration; AI clients continue to use the global `ember-mcp stdio` setup while the window focuses on Bridge status, Skills installation, Server info, and request logs.
+- **Skill documentation sync**: Updates installed Ember Skills and embedded window-installed Skills to use current `AccessBuilder` single-generic chaining, `ChunkJobMeta` slot access, `ComponentMask` mutable-struct semantics, and release validation guidance.
+
 ## [1.3.0] — Global MCP Server and Instance Discovery
 
 ### Added
