@@ -1109,7 +1109,7 @@ AI Client            MCP Server           Unity Editor
 ```
 
 - **EmberBridge**：Unity Editor 内的 TCP 服务器，在 9090-9099 范围内自动扫描可用端口，将请求分派到主线程执行，结果通过 TCP 返回。Bridge 会写入 `~/.ember/ember-status-{projectHash}.json`，记录当前端口、项目根目录、`ready/reloading/port_busy` 状态和心跳时间
-- **MCP Server**（`Ember.Mcp.Server.dll`）：独立的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。每次 `ember_execute` 前都会按 `--project-root` 重新读取状态文件并确保连接；Unity reload、端口变化或首次未连接时会自动恢复
+- **MCP Server**（`ember-mcp`）：以 `Ember.Mcp.Server` NuGet global tool 形式安装的 .NET 控制台应用，作为 AI 客户端和 Unity 之间的标准 MCP 协议适配层。Server 会发现 `~/.ember/ember-status-{projectHash}.json` 中的 Unity Bridge 实例；Unity reload、端口变化或首次未连接时会自动恢复。`Tools~/Ember.Mcp.Server.dll` 仅作为过渡 fallback 保留
 - **安全模型**：写操作由 Unity 端按命令类型和 Play Mode 状态控制。读操作可在 Edit Mode 执行；创建/销毁实体、增删组件、写组件等写操作必须在 Play Mode 下执行
 
 ### 14.2 安装与配置
@@ -1130,38 +1130,43 @@ AI Client            MCP Server           Unity Editor
 
 #### 14.2.2 AI 客户端配置
 
+先安装全局 MCP Server：
+
+```bash
+dotnet tool install -g Ember.Mcp.Server
+```
+
+已安装时更新：
+
+```bash
+dotnet tool update -g Ember.Mcp.Server
+```
+
 在 **`Client Setup`** 折叠区，可以一键安装/卸载 AI 客户端的 MCP 配置：
 
-- **Claude Code** → `.mcp.json`（项目根目录）
-- **Codex** → `.codex/config.toml`
+- **Codex Global** → `~/.codex/config.toml`
 
-点击 `Install` 后，窗口会自动生成指向 `Tools~/Ember.Mcp.Server.dll` 的配置。包更新后（Tools~ 路径中的 git hash 变化），窗口打开时也会自动修复过期的配置路径。
+点击 `Install` 后，窗口会自动生成用户级全局配置。旧的项目级 `Tools~/Ember.Mcp.Server.dll` 配置会被迁移为 `ember-mcp stdio`。
 
-也可以手动编辑配置文件。以 Claude Code 为例：
+也可以手动编辑配置文件。以 Codex 为例：
 
-```json
-{
-  "mcpServers": {
-    "ember": {
-      "command": "dotnet",
-      "args": [
-        "exec",
-        "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll",
-        "--project-root",
-        "/path/to/UnityProject"
-      ]
-    }
-  }
-}
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
 ```
 
 **启动参数：**
 
 | 参数 | 说明 |
 |------|------|
-| `--project-root <path>` | 指定 Unity 项目根目录。推荐配置，MCP Server 用它读取对应项目的状态文件并避免连到其他 Unity 项目 |
+| `stdio` | 以 MCP stdio server 模式运行。AI 客户端默认使用 |
+| `list-instances` | 列出当前可用 Unity Bridge 实例，返回 JSON |
+| `--project-root <path>` | 可选定向参数。指定 Unity 项目根目录，避免多个 Unity 项目同时打开时产生歧义 |
+| `--project-hash <hash>` | 可选定向参数。指定 Bridge status 中的 `projectHash` |
 | `--port <n>` | 手动指定端口。通常不需要；只有在状态文件不可用且明确知道端口时使用 |
-| `--allow-write` | 旧参数，保留兼容但已不再控制权限。写操作由 Unity 端 Play Mode 和命令类型判断 |
+| `--status-dir <path>` | 指定 Bridge status 文件目录，默认 `~/.ember` |
 
 ### 14.3 Command Reference (54 commands via `ember_execute`)
 

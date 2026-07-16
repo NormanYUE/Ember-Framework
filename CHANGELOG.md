@@ -2,6 +2,18 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.3.0] — 全局 MCP Server 与实例发现
+
+### Added
+- **Ember.Mcp.Server 全局 .NET tool**：MCP Server 现在可作为 `Ember.Mcp.Server` NuGet global tool 发布和安装，AI 客户端默认通过 `ember-mcp stdio` 启动，不再绑定每个 Unity 项目的 `Tools~/Ember.Mcp.Server.dll` 路径。
+- **桥接实例发现**：新增 `ember_instances` 工具和 `ember-mcp list-instances` CLI，用于列出当前可用的 Unity Ember Bridge 实例、项目路径、`projectHash`、端口和状态。
+- **多项目定向连接**：`ember_execute` 支持可选 `projectRoot` / `projectHash` 参数；多个 Unity 项目同时打开且未指定目标时会返回清晰的歧义错误，避免误连。
+- **NuGet Trusted Publishing**：新增 GitHub Actions OIDC 发布 workflow，公开 NuGet 发布不再依赖长期 API key。
+
+### Changed
+- **MCP 客户端配置**：Unity MCP 窗口现在写入用户级 `~/.codex/config.toml`，配置内容为 `command = "ember-mcp"`、`args = ["stdio"]`；旧的项目级 DLL 配置会被迁移为全局工具配置。
+- **Skill 安装路径**：Ember 技能改为安装到用户级 `~/.codex/skills` 和 `~/.claude/skills`，避免每个项目重复安装。
+
 ## [1.2.0] — SystemProfile 系统组合 API
 
 ### Added

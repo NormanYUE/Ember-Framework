@@ -1111,7 +1111,7 @@ AI Client            MCP Server           Unity Editor
 ```
 
 - **EmberBridge**: A TCP server inside the Unity Editor that automatically scans ports 9090-9099 for an available one, dispatches requests to the main thread for execution, and returns results over TCP. The Bridge writes `~/.ember/ember-status-{projectHash}.json` with the current port, project root, `ready/reloading/port_busy` state, and heartbeat timestamp
-- **MCP Server** (`Ember.Mcp.Server.dll`): A standalone .NET console application serving as the standard MCP protocol adaptation layer between the AI client and Unity. Before every `ember_execute` call, it rereads the project status file from `--project-root` and ensures the Bridge is connected; Unity reloads, port changes, and initially disconnected sessions recover automatically
+- **MCP Server** (`ember-mcp`): A .NET console application installed as the `Ember.Mcp.Server` NuGet global tool, serving as the standard MCP protocol adaptation layer between the AI client and Unity. The server discovers Unity Bridge instances from `~/.ember/ember-status-{projectHash}.json`; Unity reloads, port changes, and initially disconnected sessions recover automatically. `Tools~/Ember.Mcp.Server.dll` remains only as a transition fallback
 - **Security model**: Write access is enforced on the Unity side by command type and Play Mode state. Read operations can run in Edit Mode; creating/destroying entities, adding/removing components, and writing components require Play Mode.
 
 ### 14.2 Installation and Configuration
@@ -1132,38 +1132,43 @@ Click **`Start`** to begin TCP listening, **`Stop`** to shut down. If you want t
 
 #### 14.2.2 AI Client Configuration
 
+Install the global MCP Server first:
+
+```bash
+dotnet tool install -g Ember.Mcp.Server
+```
+
+Update an existing install:
+
+```bash
+dotnet tool update -g Ember.Mcp.Server
+```
+
 In the **`Client Setup`** foldout, you can install/uninstall MCP configurations for AI clients with one click:
 
-- **Claude Code** → `.mcp.json` (project root)
-- **Codex** → `.codex/config.toml`
+- **Codex Global** → `~/.codex/config.toml`
 
-After clicking `Install`, the window automatically generates a configuration pointing to `Tools~/Ember.Mcp.Server.dll`. When the package is updated (git hash in the Tools~ path changes), the window also auto-repairs stale configuration paths when opened.
+After clicking `Install`, the window writes a user-level global configuration. Legacy project-level `Tools~/Ember.Mcp.Server.dll` configurations are migrated to `ember-mcp stdio`.
 
-You can also edit the configuration file manually. Example for Claude Code:
+You can also edit the configuration file manually. Example for Codex:
 
-```json
-{
-  "mcpServers": {
-    "ember": {
-      "command": "dotnet",
-      "args": [
-        "exec",
-        "Assets/Packages/com.ember.ecs/Tools~/Ember.Mcp.Server.dll",
-        "--project-root",
-        "/path/to/UnityProject"
-      ]
-    }
-  }
-}
+```toml
+[mcp_servers.ember]
+command = "ember-mcp"
+args = ["stdio"]
+startup_timeout_sec = 10
 ```
 
 **Launch arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `--project-root <path>` | Unity project root. Recommended: the MCP Server uses it to read the matching project status file and avoid connecting to another Unity project |
+| `stdio` | Run as an MCP stdio server. This is the default mode for AI clients |
+| `list-instances` | List currently available Unity Bridge instances as JSON |
+| `--project-root <path>` | Optional target selector. Specifies the Unity project root to avoid ambiguity when multiple Unity projects are open |
+| `--project-hash <hash>` | Optional target selector. Specifies the `projectHash` from the Bridge status file |
 | `--port <n>` | Manually specify a port. Usually unnecessary; use only when the status file is unavailable and the port is known |
-| `--allow-write` | Legacy compatibility flag. It no longer controls permissions; writes are guarded by Unity-side Play Mode and command type checks |
+| `--status-dir <path>` | Override the Bridge status directory. Defaults to `~/.ember` |
 
 ### 14.3 Command Reference (54 commands via `ember_execute`)
 

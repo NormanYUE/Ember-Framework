@@ -2,6 +2,18 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.3.0] — Global MCP Server and Instance Discovery
+
+### Added
+- **Ember.Mcp.Server global .NET tool**: The MCP Server can now be published and installed as the `Ember.Mcp.Server` NuGet global tool. AI clients start it with `ember-mcp stdio` by default instead of binding to each Unity project's `Tools~/Ember.Mcp.Server.dll` path.
+- **Bridge instance discovery**: Adds the `ember_instances` MCP tool and `ember-mcp list-instances` CLI command to list available Unity Ember Bridge instances, project paths, `projectHash` values, ports, and status.
+- **Multi-project target selection**: `ember_execute` accepts optional `projectRoot` / `projectHash` arguments. When multiple Unity projects are open and no target is specified, the server returns a clear ambiguity error instead of connecting to the wrong project.
+- **NuGet Trusted Publishing**: Adds a GitHub Actions OIDC publishing workflow so public NuGet releases no longer depend on a long-lived API key.
+
+### Changed
+- **MCP client configuration**: The Unity MCP window now writes the user-level `~/.codex/config.toml` entry with `command = "ember-mcp"` and `args = ["stdio"]`; legacy project-level DLL configurations are migrated to the global tool command.
+- **Skill installation path**: Ember skills now install to user-level `~/.codex/skills` and `~/.claude/skills`, avoiding per-project duplication.
+
 ## [1.2.0] — SystemProfile Composition API
 
 ### Added
