@@ -449,7 +449,31 @@ Constraints: within the current `foreach` body, you cannot call `GetComponent` /
 
 ### 4.8 Parallel Systems (JobSystem&lt;TJob&gt;)
 
-Inherit from `JobSystem<TJob>`, declare read/write access + `CompileJob`, and the framework automatically schedules IJobParallelFor across Chunks (**zero allocation**).
+Inherit from `JobSystem<TJob>`, declare read/write access, and implement `CompileJob`; Ember schedules the job across Chunks through Unity Jobs. When the consumer compilation directly references `Unity.Burst`, the Source Generator emits a non-generic Burst entry point for each concrete system. The steady-state Tick path reuses a cached delegate and scheduling buffers with **zero managed allocation**.
+
+An asmdef containing Ember job systems must reference Burst explicitly. Unity asmdef references are not transitive, so installing `com.unity.collections` alone does not make `Unity.Burst` visible to the generator:
+
+```json
+{
+  "references": [
+    "Ember",
+    "Unity.Collections",
+    "Unity.Burst"
+  ]
+}
+```
+
+The default `Auto` policy generates Burst entry points when `Unity.Burst` is visible and otherwise uses the compatible generic Unity Jobs path. Select a policy at assembly or system scope when explicit behavior is required:
+
+```csharp
+// These are mutually exclusive examples; select one per assembly.
+[assembly: EmberJobCompilation(EmberJobCompilationMode.Auto)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.Managed)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.Burst)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.BurstHotUpdate, "battle-jobs-v1")]
+```
+
+`Burst` and `BurstHotUpdate` never silently fall back: a missing direct Burst reference or unavailable generated entry point produces a clear error. A concrete generic system cannot produce one unique non-generic entry point; `Auto` warns and falls back, while explicit Burst policies report an error. Add a non-generic concrete subclass when Burst is required.
 
 ```csharp
 public class MovementSystem : JobSystem<MoveJob>
@@ -464,21 +488,20 @@ public class MovementSystem : JobSystem<MoveJob>
         return new MoveJob { DeltaTime = ctx.DeltaTime };
     }
 
-    struct MoveJob : IEmberChunkJob
+    public struct MoveJob : IEmberChunkJob
     {
         public float DeltaTime;
 
         // meta contains BufferPtr, EntityCount, Comp0-3Offset/Stride
-        // Comp0 = Position (smallest TypeId), Comp1 = Velocity
+        // Column slots use a stable assembly-name + component-metadata-name order
         public void Execute(ChunkJobMeta meta, int chunkIndex)
         {
-            // Source Generator auto-generates MovementChunkMeta, with type-safe Position/Velocity access
-            // Sorted by ComponentTypeId ascending → Position(Comp0), Velocity(Comp1)
-            var m = MovementChunkMeta.Wrap(meta);
+            // Source Generator auto-generates MovementSystemChunkMeta
+            var m = MovementSystemChunkMeta.Wrap(meta);
             for (int i = 0; i < m.EntityCount; i++)
             {
                 ref var pos = ref m.Position(i);
-                var vel = m.Velocity_RO(i);
+                ref readonly var vel = ref m.Velocity(i);
                 pos.X += vel.X * DeltaTime;
             }
         }
@@ -494,14 +517,9 @@ EcsSystem (shared lifecycle)
        └── JobSystem<T>  — CompileJob → IJobParallelFor (zero allocation)
 ```
 
-**Scheduling path:** `Schedule<T>` → `ChunkJobWrapper<T> : IJobParallelFor` → Unity Job System runs in parallel per Chunk → `Complete()` blocks until done. Zero delegates/closures/boxing.
+**Scheduling path:** with Burst available, Ember uses the generated concrete non-generic `IJobParallelFor`; otherwise it uses the compatible `ChunkJobWrapper<TJob>` path. Both reuse `ChunkJobScheduleCache` with no per-frame delegates, closures, or boxing.
 
-**Class hierarchy:**
-```
-EcsSystem (shared lifecycle)
-  ├── SystemBase  — OnTick manual loop (single-threaded)
-  └── JobSystemBase — DeclareAccess + CompileJob → IEmberChunkJob (parallel)
-```
+**HybridCLR:** use regular `Burst` for AOT assemblies; use `Managed` for standard hot-update assemblies, which remain scheduled through Unity Jobs without Burst compilation; HybridCLR editions that support hot-update Burst can use `BurstHotUpdate`. Increment the version salt when an external Burst dependency changes, for example from `battle-jobs-v1` to `battle-jobs-v2`.
 
 `SystemBase` with undeclared access automatically adopts a conservative strategy (mutually exclusive with all other systems).
 

@@ -2,6 +2,21 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.5.0] — Burst Job Compilation Policies
+
+### Added
+- **Generated Burst scheduling entry points**: The Source Generator emits a non-generic `IJobParallelFor` and direct scheduling method for each accessible concrete `JobSystem<TJob>`. Runtime resolution and strongly typed delegate caching happen once during system initialization; the steady-state Tick path uses no reflection or managed allocation.
+- **Job compilation policies**: Adds `EmberJobCompilationAttribute` with `Auto`, `Managed`, `Burst`, and `BurstHotUpdate` modes, selectable at assembly, system-base, or concrete-system scope.
+- **HybridCLR policy**: AOT systems can use regular Burst, standard hot-update assemblies can explicitly select `Managed`, and HybridCLR editions that support hot-update Burst can select `BurstHotUpdate` with a version salt. Same-assembly source changes automatically change the generated entry point.
+
+### Changed
+- **Optional Burst dependency**: `Ember.dll` does not reference `Unity.Burst` directly. Consumer assemblies containing Ember job systems must directly reference `Unity.Burst` in their asmdef to generate Burst entry points; `Auto` retains the compatible generic Unity Jobs path when that reference is absent.
+- **Stable component slot order**: Runtime and generated code now sort non-tag component columns by assembly name and component metadata name, preventing cross-assembly slot drift.
+
+### Fixed
+- **Explicit policies do not silently fall back**: `Burst` and `BurstHotUpdate` produce clear compile-time or system-initialization errors when a scheduler cannot be generated or resolved. Concrete generic systems, inaccessible types, and missing Burst references have dedicated diagnostics.
+- **Fully qualified scheduling**: Generated code calls `Unity.Jobs.IJobParallelForExtensions.Schedule` through its fully qualified name so consumer extension methods cannot hijack the execution path.
+
 ## [1.4.1] — Unity Bridge PlayMode Auto-Recovery
 
 ### Fixed

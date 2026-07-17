@@ -449,7 +449,31 @@ public class SpawnMinionSystem : SystemBase
 
 ### 4.8 并行 System（JobSystem&lt;TJob&gt;）
 
-继承 `JobSystem<TJob>` 声明读写访问 + CompileJob，框架自动 IJobParallelFor 按 Chunk 并行调度（**零分配**）。
+继承 `JobSystem<TJob>` 声明读写访问并实现 `CompileJob`，框架会按 Chunk 通过 Unity Jobs 并行调度。消费程序集直接引用 `Unity.Burst` 时，Source Generator 会为具体系统生成非泛型 Burst 入口；稳定 Tick 路径复用缓存 delegate 和调度缓冲，**零 managed allocation**。
+
+包含 Ember JobSystem 的 asmdef 必须显式引用 Burst。Unity asmdef 引用不传递，仅安装 `com.unity.collections` 不足以让生成器看到 `Unity.Burst`：
+
+```json
+{
+  "references": [
+    "Ember",
+    "Unity.Collections",
+    "Unity.Burst"
+  ]
+}
+```
+
+默认 `Auto` 在可见 `Unity.Burst` 时生成 Burst 入口，否则使用兼容的泛型 Unity Jobs 路径。可在程序集或系统类型上显式选择策略：
+
+```csharp
+// 以下四项是互斥示例，每个程序集只选择一项。
+[assembly: EmberJobCompilation(EmberJobCompilationMode.Auto)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.Managed)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.Burst)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.BurstHotUpdate, "battle-jobs-v1")]
+```
+
+`Burst` / `BurstHotUpdate` 不允许静默回退，缺少直接 Burst 引用或无法生成入口会产生明确错误。具体泛型系统无法生成唯一的非泛型入口：`Auto` 会给出警告并回退，显式 Burst 策略会报错；需要 Burst 时应增加非泛型具体子类。
 
 ```csharp
 public class MovementSystem : JobSystem<MoveJob>
@@ -464,21 +488,20 @@ public class MovementSystem : JobSystem<MoveJob>
         return new MoveJob { DeltaTime = ctx.DeltaTime };
     }
 
-    struct MoveJob : IEmberChunkJob
+    public struct MoveJob : IEmberChunkJob
     {
         public float DeltaTime;
 
         // meta 含 BufferPtr、EntityCount、Comp0-3Offset/Stride
-        // Comp0 = Position（TypeId 最小）、Comp1 = Velocity
+        // 列槽按程序集名 + 组件 metadata name 稳定排序
         public void Execute(ChunkJobMeta meta, int chunkIndex)
         {
-            // Source Generator 自动生成 MovementChunkMeta，含 Position/Velocity 类型安全访问
-            // 按 ComponentTypeId 升序 → Position(Comp0), Velocity(Comp1)
-            var m = MovementChunkMeta.Wrap(meta);
+            // Source Generator 自动生成 MovementSystemChunkMeta
+            var m = MovementSystemChunkMeta.Wrap(meta);
             for (int i = 0; i < m.EntityCount; i++)
             {
                 ref var pos = ref m.Position(i);
-                var vel = m.Velocity_RO(i);
+                ref readonly var vel = ref m.Velocity(i);
                 pos.X += vel.X * DeltaTime;
             }
         }
@@ -494,14 +517,9 @@ EcsSystem（共享生命周期）
        └── JobSystem<T>  — CompileJob → IJobParallelFor（零分配）
 ```
 
-**调度路径：** `Schedule<T>` → `ChunkJobWrapper<T> : IJobParallelFor` → Unity Job System 按 Chunk 并行 → `Complete()` 阻塞返回。零 delegate/closure/装箱。
+**调度路径：** Burst 可用时走生成的具体非泛型 `IJobParallelFor`；否则走 `ChunkJobWrapper<TJob>` 兼容路径。两者都复用 `ChunkJobScheduleCache`，无每帧 delegate、closure 或装箱。
 
-**类层次：**
-```
-EcsSystem（共享生命周期）
-  ├── SystemBase  — OnTick 手写循环（单线程）
-  └── JobSystemBase — DeclareAccess + CompileJob → IEmberChunkJob（并行）
-```
+**HybridCLR：** AOT 程序集使用普通 `Burst`；标准热更新程序集使用 `Managed`，仍由 Unity Jobs 调度但不进行 Burst 编译；支持热更新 Burst 的 HybridCLR 版本可使用 `BurstHotUpdate`。外部 Burst 依赖变化时必须递增版本盐，例如从 `battle-jobs-v1` 改为 `battle-jobs-v2`。
 
 `SystemBase` 未声明访问时自动保守策略（与所有系统互斥）。
 

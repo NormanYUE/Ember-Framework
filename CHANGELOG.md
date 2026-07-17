@@ -2,6 +2,21 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.5.0] — Burst Job 编译策略
+
+### Added
+- **生成式 Burst 调度入口**：Source Generator 为可访问的具体 `JobSystem<TJob>` 生成非泛型 `IJobParallelFor` 和直接调度方法。运行时只在系统初始化时解析并缓存强类型 delegate，稳定 Tick 路径不使用反射且不产生 managed allocation。
+- **Job 编译策略**：新增 `EmberJobCompilationAttribute` 与 `Auto`、`Managed`、`Burst`、`BurstHotUpdate` 四种模式，可在程序集、系统基类或具体系统上选择 Unity Jobs/Burst 路径。
+- **HybridCLR 策略**：AOT 系统可使用普通 Burst；标准热更新程序集可显式使用 `Managed`；支持热更新 Burst 的 HybridCLR 版本可使用带版本盐的 `BurstHotUpdate`，同程序集源码变化会自动改变生成入口。
+
+### Changed
+- **可选 Burst 依赖**：`Ember.dll` 不直接引用 `Unity.Burst`。包含 Ember JobSystem 的消费程序集需要在 asmdef 中直接引用 `Unity.Burst` 才会生成 Burst 入口；`Auto` 在缺少引用时保留兼容的泛型 Unity Jobs 路径。
+- **稳定列槽顺序**：运行时和生成器统一按程序集名与组件 metadata name 排序非 tag 组件列，避免跨程序集组件访问槽漂移。
+
+### Fixed
+- **显式策略不静默降级**：`Burst` / `BurstHotUpdate` 无法生成或解析调度入口时在编译或系统初始化阶段给出明确错误；具体泛型系统、不可访问类型和缺失 Burst 引用均有对应诊断。
+- **调度调用限定**：生成代码通过完全限定的 `Unity.Jobs.IJobParallelForExtensions.Schedule` 调度，避免消费程序集中的同名扩展方法劫持执行路径。
+
 ## [1.4.1] — Unity Bridge PlayMode 自动恢复
 
 ### Fixed
