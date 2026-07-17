@@ -2,6 +2,35 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.0] — Robustness and Performance Optimizations
+
+### Added
+- **SystemProfile group expansion**: Added `SystemProfile.ExpandGroup<T>()` to flatten a `SystemGroup` into its leaf systems inside a profile, enabling per-leaf additions, removals, and reordering.
+- **Source Generator component diagnostics**: The component registration generator now reports `EMBER015`–`EMBER018` diagnostics at compile time for multiple kind interfaces, missing kind interface, non-unmanaged struct, and tag components with instance fields.
+
+### Changed
+- **SystemGroup.Configure obsolete**: `SystemGroup.Configure(SystemTicker)` is now marked `[Obsolete]` with `error: false`, providing a migration window before it becomes abstract in a future major version.
+- **Component registration error messages**: `ComponentTypeRegistry.GetInfo` now provides clearer errors for unregistered types and out-of-range IDs, suggesting checks for kind interfaces, Source Generator output, and assembly load order.
+- **README MCP examples**: Corrected package README examples that incorrectly presented `ember_execute` commands as standalone tool names (`ember_get_entity`, `ember_create_entity`, etc.); examples now use the `commands` array format of `ember_execute`.
+
+### Perf
+- **TickParallelLayer JobHandle batching**: Parallel layers now collect all handles before calling `JobHandle.CombineDependencies` once, avoiding redundant pairwise merges.
+- **AccessDeclaration caching**: `SystemTicker` caches each system's `ReadMask`/`WriteMask`/etc. during `Init`, removing repeated `GetAccessDeclaration` work from the hot path.
+- **Parallel-layer entity count cache**: Diagnostic mode caches entity counts per tick so multiple systems do not repeat full queries.
+- **DependencyGraph layer build O(n³)→O(n·c)**: Replaced per-round O(n) scans with `lastReadLayer`/`lastWriteLayer` arrays.
+- **ComponentTypeInfo sort caching**: Added cached `AssemblyName` and `FullName` properties to reduce reflection overhead during chunk/column sorting.
+- **CreateArchetype single enumeration**: Reduced two component-ID enumerations to one `List<ComponentTypeId>` pass.
+- **RecordMask set-bit iteration**: `SystemContext.RecordMask` now iterates set bits instead of the full `ComponentTypeRegistry.Count`.
+- **EntityQuery strong hash**: `GetHashCode` now uses the same prime-mixed algorithm as `EntityQueryKey` to reduce query-cache collisions.
+- **GetChunks skips redundant validation**: Removed the redundant `query.Matches` check on the cache-miss path.
+
+### Fixed
+- **ECB playback exception safety**: `SystemContext.EndTick` disposes the old buffer and creates a new one when ECB playback fails, preventing stale unplayable commands.
+- **ECB temp-entity index overflow**: `EntityCommandBuffer.CreateEntity` now throws a clear exception when `m_NextTempIndex == int.MinValue`.
+- **Parallel-layer cleanup playback**: `TickParallelLayer` cleanup now bases `playbackDeferredChanges` only on whether system context was entered, not on parallel errors.
+- **FlushDeferredCreates structural barrier**: `World.Query.cs` calls `m_Safety.BeforeStructuralChange()` at the start of `FlushDeferredCreates`.
+- **WorldSafety parallel-layer nesting guard**: `BeginParallelLayer` now checks `m_InParallelLayer` to prevent nested parallel layers.
+
 ## [1.5.0] — Burst Job Compilation Policies
 
 ### Added

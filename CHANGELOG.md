@@ -2,6 +2,35 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.0] — 稳健性与高性能优化
+
+### Added
+- **SystemProfile group 展开**：新增 `SystemProfile.ExpandGroup<T>()`，可把 `SystemGroup` 的叶子系统一次性展开到 profile 中，方便在 profile 里对 group 内系统做增删替换。
+- **Source Generator 组件诊断**：组件注册生成器现在在编译期报告 `EMBER015`–`EMBER018` 诊断，包括实现多个 kind 接口、未实现 kind 接口、非 unmanaged struct、tag 组件包含实例字段。
+
+### Changed
+- **SystemGroup.Configure 过时提示**：`SystemGroup.Configure(SystemTicker)` 标记为 `[Obsolete]`（error: false），为将来改为 abstract 提供迁移期，避免直接破坏现有 group 代码。
+- **组件注册错误信息**：`ComponentTypeRegistry.GetInfo` 在未注册或 ID 越界时给出更明确的错误说明，提示检查 kind 接口、Source Generator 生成结果和程序集加载时机。
+- **README MCP 示例**：修正包 README 中把 `ember_execute` 命令误写成独立工具名（`ember_get_entity`、`ember_create_entity` 等）的示例，统一为 `ember_execute` 的 `commands` 数组格式。
+
+### Perf
+- **TickParallelLayer 批量合并 JobHandle**：并行层把循环内的 `JobHandle.CombineDependencies` 改为收集所有 handle 后一次性合并，减少冗余合并开销。
+- **AccessDeclaration 缓存**：`SystemTicker` 在 Init 阶段缓存每个系统的 `ReadMask`/`WriteMask` 等声明，Tick 热路径不再重复 `GetAccessDeclaration`。
+- **并行层实体计数缓存**：诊断模式下每 tick 缓存实体计数，避免多个系统重复全量查询。
+- **DependencyGraph 层构建 O(n³)→O(n·c)**：使用 `lastReadLayer`/`lastWriteLayer` 数组替代每轮 O(n) 扫描，构建复杂度从 O(n³) 降到 O(n·c)。
+- **ComponentTypeInfo 排序缓存**：新增缓存的 `AssemblyName` 和 `FullName` 属性，减少 chunk/列排序时的反射开销。
+- **CreateArchetype 单次枚举**：从两次组件 ID 枚举改为一次 `List<ComponentTypeId>` 收集，减少 archetype 创建时的遍历。
+- **RecordMask set bits 遍历**：`SystemContext.RecordMask` 改为遍历 mask 的 set bits 而非整个 `ComponentTypeRegistry.Count`。
+- **EntityQuery 强哈希**：`GetHashCode` 改为与 `EntityQueryKey` 一致的质数混合算法，降低查询缓存冲突。
+- **GetChunks 跳过冗余校验**：缓存未命中路径移除重复的 `query.Matches` 校验。
+
+### Fixed
+- **ECB 播放异常安全**：`SystemContext.EndTick` 在 ECB 播放失败时 dispose 旧 buffer 并创建新 buffer，避免残留不可播放命令。
+- **ECB temp-entity 索引溢出**：`EntityCommandBuffer.CreateEntity` 在 `m_NextTempIndex == int.MinValue` 时抛明确异常。
+- **并行层 cleanup 独立 playback**：`TickParallelLayer` cleanup 段的 `playbackDeferredChanges` 仅依赖是否成功进入 system 上下文，不再依赖无并行错误。
+- **FlushDeferredCreates 结构变更阻断**：`World.Query.cs` 在 `FlushDeferredCreates` 开头调用 `m_Safety.BeforeStructuralChange()`，确保结构变更安全。
+- **WorldSafety 并行层嵌套防护**：`BeginParallelLayer` 增加 `m_InParallelLayer` 嵌套检查，防止并行层嵌套进入。
+
 ## [1.5.0] — Burst Job 编译策略
 
 ### Added

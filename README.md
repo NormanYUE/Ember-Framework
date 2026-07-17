@@ -1261,17 +1261,17 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 以下是 AI 客户端中一次典型的交互流程：
 
 > **用户**: 查询所有有 Health 组件的实体，看看谁血量低  
-> **AI** 调用 `ember_execute({"op":"query_entities","all":["Health"]})`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"query_entities","all":["Health"]}]})`  
 > → 返回 3 个实体，实体 #1 的 Health.Current = 80，实体 #2 的 Health.Current = 5  
 >
 > **用户**: 实体 #2 快死了，看看它的详细信息  
-> **AI** 调用 `ember_get_entity(entityIndex=2)`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"get_entity_full","entityIndex":2}]})`  
 > → 返回 Entity #2 的全部组件：Health { Current: 5, Max: 100 }，Position { X: 10, Y: 2, Z: 0 }，DeadTag（标记）  
 >
 > **用户**: 给我在它旁边（X+3）创建一个新实体，带相同的组件  
-> **AI** 调用 `ember_create_entity(components=["Health","Position"])` → 拿到新 entityIndex=15  
-> **AI** 调用 `ember_set_component(15, "Health", {"Current":100,"Max":100})`  
-> **AI** 调用 `ember_set_component(15, "Position", {"X":13,"Y":2,"Z":0})`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"create_entity","components":["Health","Position"]}]})` → 拿到新 entityIndex=15  
+> **AI** 调用 `ember_execute({"commands":[{"op":"set_component","entityIndex":15,"component":"Health","value":{"Current":100,"Max":100}}]})`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"set_component","entityIndex":15,"component":"Position","value":{"X":13,"Y":2,"Z":0}}]})`  
 > → 实体 #15 创建完成
 
 ### 14.5 调试与故障排查

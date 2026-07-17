@@ -1263,17 +1263,17 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 A typical interaction flow in an AI client:
 
 > **User**: Query all entities with a Health component and find low-health ones
-> **AI** calls `ember_execute({"op":"query_entities","all":["Health"]})`
+> **AI** calls `ember_execute({"commands":[{"op":"query_entities","all":["Health"]}]})`
 > → Returns 3 entities: Entity #1 Health.Current = 80, Entity #2 Health.Current = 5
 >
 > **User**: Entity #2 is nearly dead, show its details
-> **AI** calls `ember_get_entity(entityIndex=2)`
+> **AI** calls `ember_execute({"commands":[{"op":"get_entity_full","entityIndex":2}]})`
 > → Returns all components on Entity #2: Health { Current: 5, Max: 100 }, Position { X: 10, Y: 2, Z: 0 }, DeadTag (tag)
 >
 > **User**: Create a new entity next to it (X+3) with the same components
-> **AI** calls `ember_create_entity(components=["Health","Position"])` → gets new entityIndex=15
-> **AI** calls `ember_set_component(15, "Health", {"Current":100,"Max":100})`
-> **AI** calls `ember_set_component(15, "Position", {"X":13,"Y":2,"Z":0})`
+> **AI** calls `ember_execute({"commands":[{"op":"create_entity","components":["Health","Position"]}]})` → gets new entityIndex=15
+> **AI** calls `ember_execute({"commands":[{"op":"set_component","entityIndex":15,"component":"Health","value":{"Current":100,"Max":100}}]})`
+> **AI** calls `ember_execute({"commands":[{"op":"set_component","entityIndex":15,"component":"Position","value":{"X":13,"Y":2,"Z":0}}]})`
 > → Entity #15 created
 
 ### 14.5 Debugging and Troubleshooting
