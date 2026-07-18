@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.1] — Fix Parallel-Layer JobHandle Safety Handle Regression
+
+### Fixed
+- **Missing safety handle on parallel-layer JobHandle merge**: In 1.6.0, `TickParallelLayer` collected JobHandles via `NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray` and merged them with `JobHandle.CombineDependencies`, but the resulting array lacked a valid `AtomicSafetyHandle`. Under Unity 2022.3 + Burst this caused `AtomicSafetyHandle.CheckReadAndThrow` failures. The code now allocates a real `NativeArray<JobHandle>` with `Allocator.Temp`, copies handles into it, merges them, and disposes immediately.
+
 ## [1.6.0] — Robustness and Performance Optimizations
 
 ### Added

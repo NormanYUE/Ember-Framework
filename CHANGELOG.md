@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.1] — 修复并行层 JobHandle 安全句柄回归
+
+### Fixed
+- **并行层 JobHandle 合并安全句柄缺失**：`TickParallelLayer` 在 1.6.0 中使用 `NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray` 收集 JobHandle 后一次性合并，但该数组缺少有效的 `AtomicSafetyHandle`，在 Unity 2022.3 + Burst 运行时触发 `AtomicSafetyHandle.CheckReadAndThrow` 失败。现改为使用 `Allocator.Temp` 分配真正的 `NativeArray<JobHandle>`，确保 `JobHandle.CombineDependencies` 拥有合法 safety handle，并立即 dispose。
+
 ## [1.6.0] — 稳健性与高性能优化
 
 ### Added
