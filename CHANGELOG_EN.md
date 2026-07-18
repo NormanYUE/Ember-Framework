@@ -27,7 +27,7 @@ All notable changes to the Ember ECS Framework.
 ### Fixed
 - **ECB playback exception safety**: `SystemContext.EndTick` disposes the old buffer and creates a new one when ECB playback fails, preventing stale unplayable commands.
 - **ECB temp-entity index overflow**: `EntityCommandBuffer.CreateEntity` now throws a clear exception when `m_NextTempIndex == int.MinValue`.
-- **Parallel-layer cleanup playback**: `TickParallelLayer` cleanup now bases `playbackDeferredChanges` only on whether system context was entered, not on parallel errors.
+- **Parallel-layer cleanup playback**: `TickParallelLayer` cleanup now bases `playbackDeferredChanges` on whether system context was entered successfully **and** no parallel errors have occurred, preventing stale ECBs from playing back on failure paths.
 - **FlushDeferredCreates structural barrier**: `World.Query.cs` calls `m_Safety.BeforeStructuralChange()` at the start of `FlushDeferredCreates`.
 - **WorldSafety parallel-layer nesting guard**: `BeginParallelLayer` now checks `m_InParallelLayer` to prevent nested parallel layers.
 

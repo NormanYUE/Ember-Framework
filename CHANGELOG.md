@@ -27,7 +27,7 @@ All notable changes to the Ember ECS Framework.
 ### Fixed
 - **ECB 播放异常安全**：`SystemContext.EndTick` 在 ECB 播放失败时 dispose 旧 buffer 并创建新 buffer，避免残留不可播放命令。
 - **ECB temp-entity 索引溢出**：`EntityCommandBuffer.CreateEntity` 在 `m_NextTempIndex == int.MinValue` 时抛明确异常。
-- **并行层 cleanup 独立 playback**：`TickParallelLayer` cleanup 段的 `playbackDeferredChanges` 仅依赖是否成功进入 system 上下文，不再依赖无并行错误。
+- **并行层 cleanup 独立 playback**：`TickParallelLayer` cleanup 段的 `playbackDeferredChanges` 仅在成功进入 system 上下文且无并行错误时回放，避免失败路径下残留 ECB 被错误播放。
 - **FlushDeferredCreates 结构变更阻断**：`World.Query.cs` 在 `FlushDeferredCreates` 开头调用 `m_Safety.BeforeStructuralChange()`，确保结构变更安全。
 - **WorldSafety 并行层嵌套防护**：`BeginParallelLayer` 增加 `m_InParallelLayer` 嵌套检查，防止并行层嵌套进入。
 
