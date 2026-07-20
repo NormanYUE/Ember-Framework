@@ -2,6 +2,29 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.2] — 稳健性强化与并行热路径优化
+
+### Perf
+- **TickParallelLayer 热路径合并**：并行层 schedule 与 cleanup 段的 `BeginSystemExecution`/`EndSystemExecution` 调用从每系统每帧 4 次减为 2 次，消除冗余的 system 上下文包裹。
+- **ComponentPackColumnCache 缓存统一**：移除 `EnsureColumn` 的 stale-count 快速路径，始终以 `chunk.Count` 保活。
+
+### Fixed
+- **Chunk.GetReadOnlyColumn 丢失内联**：恢复 `[MethodImpl(MethodImplOptions.AggressiveInlining)]`。
+- **SystemTicker.Tick 已释放 world 抛异常**：`world.IsDisposed` 从静默 `return` 改为 `ObjectDisposedException`，避免已释放 world 继续被 tick 的隐藏错误。
+
+### Changed
+- **ComponentMask.Clone**：新增深拷贝方法，Archetype/DeferredCreate/FlushDeferredCreates/BatchMigration 等字典键位置统一使用 Clone 保护。
+- **Chunk 原生指针安全守卫**：`PointerViewSafetyState` generation 追踪，Chunk 释放/重置时递增，`ChunkColumn<T>`/`ReadOnlyChunkColumn<T>` 访问时校验，防止 Dangling pointer。
+- **ECB 回放重入保护**：`World.Playback` 增加 `m_PlaybackDepth` 计数器 + 异常报嵌套；`CreateCommandBuffer` 也检查重入。
+- **ECSManager.Tick 前置校验**：增加 World null / disposed / tickerIndex 越界三重检查。
+- **DependencyGraph 无声明 barrier**：移除全 undeclared 单层 fast path，未声明系统现通过 `IsBarrier` 统一处理，未声明的 JobSystem 之间不再误放在同一并行层。
+
+### Added
+- **BufferSpan 过期防护测试**：Buffer 增长/清空/销毁后 span 访问抛出 `InvalidOperationException`。
+- **ComponentMask.Clone 测试**：独立拷贝测试 + 内联仅读拷贝 + 空掩码拷贝。
+- **DependencyGraph 边界测试**：未声明系统独占层 + barrier 打断声明系统层拆分。
+- **SystemProfile.ExpandGroup 测试**：叶子展开/嵌套展开/空组/重复忽略/与 InsertBefore 组合。
+
 ## [1.6.1] — 修复并行层 JobHandle 安全句柄回归
 
 ### Fixed

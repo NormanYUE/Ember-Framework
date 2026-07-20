@@ -2,6 +2,29 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.2] — Hardening & Parallel Hot-Path Optimization
+
+### Perf
+- **TickParallelLayer hot-path merge**: Reduced `BeginSystemExecution`/`EndSystemExecution` calls per system per tick from 4 to 2 by carrying the system context from schedule through cleanup, eliminating redundant context wrapping.
+- **ComponentPackColumnCache unified caching**: Removed the stale-count fast path in `EnsureColumn`; count now always reads from `chunk.Count` for liveness.
+
+### Fixed
+- **Chunk.GetReadOnlyColumn missing inlining**: Restored `[MethodImpl(MethodImplOptions.AggressiveInlining)]`.
+- **SystemTicker.Tick throws on disposed world**: `world.IsDisposed` changed from silent `return` to `ObjectDisposedException`, preventing hidden errors from ticking a disposed world.
+
+### Changed
+- **ComponentMask.Clone**: New deep-copy method; all dictionary-key sites in Archetype, DeferredCreate, FlushDeferredCreates, and BatchMigration now use Clone for defensive protection.
+- **Chunk native pointer safety guards**: `PointerViewSafetyState` generation tracking; Chunk dispose/reset increments the generation; `ChunkColumn<T>`/`ReadOnlyChunkColumn<T>` validate on access to prevent dangling pointers.
+- **ECB playback reentrancy guard**: `World.Playback` added `m_PlaybackDepth` counter plus nested-playback exception; `CreateCommandBuffer` also checks reentrancy.
+- **ECSManager.Tick pre-checks**: Added World null/disposed/tickerIndex out-of-range validation.
+- **DependencyGraph undeclared barrier**: Removed the all-undeclared single-layer fast path; undeclared systems now uniformly handled via `IsBarrier`, preventing undeclared JobSystems from incorrectly sharing a parallel layer.
+
+### Added
+- **BufferSpan staleness tests**: Buffer growth/clear/destroy after span acquisition throws `InvalidOperationException`.
+- **ComponentMask.Clone tests**: Independent copy, inline-only copy, and empty mask copy.
+- **DependencyGraph boundary tests**: Undeclared standalone layers and barrier splitting of declared layers.
+- **SystemProfile.ExpandGroup tests**: Leaf expansion, nested flattening, empty group, duplicate ignore, and InsertBefore combination.
+
 ## [1.6.1] — Fix Parallel-Layer JobHandle Safety Handle Regression
 
 ### Fixed
