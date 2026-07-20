@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.7.0] — System Graph Visualization & Performance Hotspots
+
+### Added
+- **Editor-only system dependency graph visualization**: Added the `Ember.Diagnostics.Core` shared assembly with `SystemGraphReport`, `SystemGraphBuilder`, and `SystemGraphSvgRenderer` for pure .NET graph building and self-contained HTML/SVG rendering.
+- **`Profiler.Attach(ECSManager)` API**: Editor-only opt-in that attaches `EmberDiagnosticsService` and caches system dependency graph snapshots at 1-second intervals.
+- **Enhanced `get_dependency_graph` MCP command**: Now returns `systems`, `edges`, and `systemCount`/`edgeCount` while preserving the legacy `layers` output; supports optional `includeMetrics`.
+- **New `export_system_graph` MCP command**: Exports a self-contained HTML file with an inline SVG dependency graph and JavaScript tooltips to `Application.temporaryCachePath/EmberGraphs/` or an explicit `outputPath`.
+- **Systems Window performance hotspot coloring**: Graph nodes are tinted by average tick time (≥2ms red, ≥1ms orange, ≥0.5ms yellow) alongside existing access-validation colors.
+- **Systems Window "Export Graph HTML" button**: One-click export from the Editor window with Finder reveal.
+
 ## [1.6.4] — ArchetypeIndex All Query Fix
 
 ### Fixed

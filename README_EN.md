@@ -1240,7 +1240,7 @@ Skills are project-level files intended to be committed and shared with the Unit
 | `--port <n>` | Manually specify a port. Usually unnecessary; use only when the status file is unavailable and the port is known |
 | `--status-dir <path>` | Override the Bridge status directory. Defaults to `~/.ember` |
 
-### 14.3 Command Reference (54 commands via `ember_execute`)
+### 14.3 Command Reference (55 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
@@ -1248,8 +1248,8 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 **Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (11):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy
-**System (4):** system_status, get_system_info, get_dependency_graph, advance_frame
+**Diagnostic (13):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph, export_system_graph
+**System (3):** system_status, get_system_info, advance_frame
 **Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
 **Write Safety (1):** safe_write_batch
