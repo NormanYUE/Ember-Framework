@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.3] — MCP Safe Serialization Fix
+
+### Fixed
+- **MCP singleton field serialization recursion crash**: `get_singleton` / `get_singletons(includeFields=true)` now serialize fields through a safe serializer with a maximum recursion depth, reference-cycle protection, and field-read error summaries, preventing Unity main-thread stack overflows from Native containers or complex reference graphs.
+- **Unity Native container summaries**: `NativeArray<>`, `NativeList<>`, `NativeParallel*`, and other `Unity.Collections` containers are no longer recursively reflected. They are summarized with safe fields such as type, `isCreated`, `length`, and `capacity`.
+
+### Changed
+- **`get_singletons` no longer expands fields by default**: default `includeFields=false`; callers must explicitly pass `includeFields=true` to inspect fields. Prefer dedicated commands such as `get_buffer` for high-risk runtime state.
+
 ## [1.6.2] — Hardening & Parallel Hot-Path Optimization
 
 ### Perf

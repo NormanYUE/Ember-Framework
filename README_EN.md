@@ -1258,6 +1258,8 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 Example: `{"op": "query_entities", "all": ["Position"], "limit": 10}`
 Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSystem"}`
 
+`get_singletons` does not expand fields by default. Pass `{"op":"get_singletons","includeFields":true}` when field inspection is required. Fields containing Unity Native containers such as `NativeArray<>`, `NativeList<>`, and `NativeParallel*` are returned as safe summaries instead of recursively expanding runtime containers.
+
 ### 14.4 Usage Examples
 
 A typical interaction flow in an AI client:

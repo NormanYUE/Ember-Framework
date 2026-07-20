@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.3] — MCP 安全序列化修复
+
+### Fixed
+- **MCP singleton 字段序列化递归崩溃**：`get_singleton` / `get_singletons(includeFields=true)` 现在通过安全 serializer 输出字段，包含最大递归深度、引用循环保护和字段读取异常摘要，避免 Native 容器或复杂引用图导致 Unity 主线程栈溢出。
+- **Unity Native 容器摘要输出**：`NativeArray<>`、`NativeList<>`、`NativeParallel*` 等 `Unity.Collections` 容器不再被反射深展开，只输出类型、`isCreated`、`length`、`capacity` 等可安全读取的摘要字段。
+
+### Changed
+- **`get_singletons` 默认不展开字段**：默认 `includeFields=false`，需要读取字段时必须显式传 `includeFields=true`。高风险运行时状态建议优先使用专门命令，例如 `get_buffer`。
+
 ## [1.6.2] — 稳健性强化与并行热路径优化
 
 ### Perf

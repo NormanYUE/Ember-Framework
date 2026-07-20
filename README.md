@@ -1256,6 +1256,8 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 Example: `{"op": "query_entities", "all": ["Position"], "limit": 10}`
 Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSystem"}`
 
+`get_singletons` 默认不展开字段。需要字段时显式传 `{"op":"get_singletons","includeFields":true}`；含 `NativeArray<>`、`NativeList<>`、`NativeParallel*` 等 Unity Native 容器的字段只返回安全摘要，避免调试查询递归展开运行时容器。
+
 ### 14.4 使用示例
 
 以下是 AI 客户端中一次典型的交互流程：
