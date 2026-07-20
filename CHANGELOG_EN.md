@@ -2,6 +2,87 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.3] — MCP Safe Serialization Fix
+
+### Fixed
+- **MCP singleton field serialization recursion crash**: `get_singleton` / `get_singletons(includeFields=true)` now serialize fields through a safe serializer with a maximum recursion depth, reference-cycle protection, and field-read error summaries, preventing Unity main-thread stack overflows from Native containers or complex reference graphs.
+- **Unity Native container summaries**: `NativeArray<>`, `NativeList<>`, `NativeParallel*`, and other `Unity.Collections` containers are no longer recursively reflected. They are summarized with safe fields such as type, `isCreated`, `length`, and `capacity`.
+
+### Changed
+- **`get_singletons` no longer expands fields by default**: default `includeFields=false`; callers must explicitly pass `includeFields=true` to inspect fields. Prefer dedicated commands such as `get_buffer` for high-risk runtime state.
+
+## [1.6.2] — Hardening & Parallel Hot-Path Optimization
+
+### Perf
+- **TickParallelLayer hot-path merge**: Reduced `BeginSystemExecution`/`EndSystemExecution` calls per system per tick from 4 to 2 by carrying the system context from schedule through cleanup, eliminating redundant context wrapping.
+- **ComponentPackColumnCache unified caching**: Removed the stale-count fast path in `EnsureColumn`; count now always reads from `chunk.Count` for liveness.
+
+### Fixed
+- **Chunk.GetReadOnlyColumn missing inlining**: Restored `[MethodImpl(MethodImplOptions.AggressiveInlining)]`.
+- **SystemTicker.Tick throws on disposed world**: `world.IsDisposed` changed from silent `return` to `ObjectDisposedException`, preventing hidden errors from ticking a disposed world.
+
+### Changed
+- **ComponentMask.Clone**: New deep-copy method; all dictionary-key sites in Archetype, DeferredCreate, FlushDeferredCreates, and BatchMigration now use Clone for defensive protection.
+- **Chunk native pointer safety guards**: `PointerViewSafetyState` generation tracking; Chunk dispose/reset increments the generation; `ChunkColumn<T>`/`ReadOnlyChunkColumn<T>` validate on access to prevent dangling pointers.
+- **ECB playback reentrancy guard**: `World.Playback` added `m_PlaybackDepth` counter plus nested-playback exception; `CreateCommandBuffer` also checks reentrancy.
+- **ECSManager.Tick pre-checks**: Added World null/disposed/tickerIndex out-of-range validation.
+- **DependencyGraph undeclared barrier**: Removed the all-undeclared single-layer fast path; undeclared systems now uniformly handled via `IsBarrier`, preventing undeclared JobSystems from incorrectly sharing a parallel layer.
+
+### Added
+- **BufferSpan staleness tests**: Buffer growth/clear/destroy after span acquisition throws `InvalidOperationException`.
+- **ComponentMask.Clone tests**: Independent copy, inline-only copy, and empty mask copy.
+- **DependencyGraph boundary tests**: Undeclared standalone layers and barrier splitting of declared layers.
+- **SystemProfile.ExpandGroup tests**: Leaf expansion, nested flattening, empty group, duplicate ignore, and InsertBefore combination.
+
+## [1.6.1] — Fix Parallel-Layer JobHandle Safety Handle Regression
+
+### Fixed
+- **Missing safety handle on parallel-layer JobHandle merge**: In 1.6.0, `TickParallelLayer` collected JobHandles via `NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray` and merged them with `JobHandle.CombineDependencies`, but the resulting array lacked a valid `AtomicSafetyHandle`. Under Unity 2022.3 + Burst this caused `AtomicSafetyHandle.CheckReadAndThrow` failures. The code now allocates a real `NativeArray<JobHandle>` with `Allocator.Temp`, copies handles into it, merges them, and disposes immediately.
+
+## [1.6.0] — Robustness and Performance Optimizations
+
+### Added
+- **SystemProfile group expansion**: Added `SystemProfile.ExpandGroup<T>()` to flatten a `SystemGroup` into its leaf systems inside a profile, enabling per-leaf additions, removals, and reordering.
+- **Source Generator component diagnostics**: The component registration generator now reports `EMBER015`–`EMBER018` diagnostics at compile time for multiple kind interfaces, missing kind interface, non-unmanaged struct, and tag components with instance fields.
+
+### Changed
+- **SystemGroup.Configure obsolete**: `SystemGroup.Configure(SystemTicker)` is now marked `[Obsolete]` with `error: false`, providing a migration window before it becomes abstract in a future major version.
+- **Component registration error messages**: `ComponentTypeRegistry.GetInfo` now provides clearer errors for unregistered types and out-of-range IDs, suggesting checks for kind interfaces, Source Generator output, and assembly load order.
+- **README MCP examples**: Corrected package README examples that incorrectly presented `ember_execute` commands as standalone tool names (`ember_get_entity`, `ember_create_entity`, etc.); examples now use the `commands` array format of `ember_execute`.
+
+### Perf
+- **TickParallelLayer JobHandle batching**: Parallel layers now collect all handles before calling `JobHandle.CombineDependencies` once, avoiding redundant pairwise merges.
+- **AccessDeclaration caching**: `SystemTicker` caches each system's `ReadMask`/`WriteMask`/etc. during `Init`, removing repeated `GetAccessDeclaration` work from the hot path.
+- **Parallel-layer entity count cache**: Diagnostic mode caches entity counts per tick so multiple systems do not repeat full queries.
+- **DependencyGraph layer build O(n³)→O(n·c)**: Replaced per-round O(n) scans with `lastReadLayer`/`lastWriteLayer` arrays.
+- **ComponentTypeInfo sort caching**: Added cached `AssemblyName` and `FullName` properties to reduce reflection overhead during chunk/column sorting.
+- **CreateArchetype single enumeration**: Reduced two component-ID enumerations to one `List<ComponentTypeId>` pass.
+- **RecordMask set-bit iteration**: `SystemContext.RecordMask` now iterates set bits instead of the full `ComponentTypeRegistry.Count`.
+- **EntityQuery strong hash**: `GetHashCode` now uses the same prime-mixed algorithm as `EntityQueryKey` to reduce query-cache collisions.
+- **GetChunks skips redundant validation**: Removed the redundant `query.Matches` check on the cache-miss path.
+
+### Fixed
+- **ECB playback exception safety**: `SystemContext.EndTick` disposes the old buffer and creates a new one when ECB playback fails, preventing stale unplayable commands.
+- **ECB temp-entity index overflow**: `EntityCommandBuffer.CreateEntity` now throws a clear exception when `m_NextTempIndex == int.MinValue`.
+- **Parallel-layer cleanup playback**: `TickParallelLayer` cleanup now bases `playbackDeferredChanges` on whether system context was entered successfully **and** no parallel errors have occurred, preventing stale ECBs from playing back on failure paths.
+- **FlushDeferredCreates structural barrier**: `World.Query.cs` calls `m_Safety.BeforeStructuralChange()` at the start of `FlushDeferredCreates`.
+- **WorldSafety parallel-layer nesting guard**: `BeginParallelLayer` now checks `m_InParallelLayer` to prevent nested parallel layers.
+
+## [1.5.0] — Burst Job Compilation Policies
+
+### Added
+- **Generated Burst scheduling entry points**: The Source Generator emits a non-generic `IJobParallelFor` and direct scheduling method for each accessible concrete `JobSystem<TJob>`. Runtime resolution and strongly typed delegate caching happen once during system initialization; the steady-state Tick path uses no reflection or managed allocation.
+- **Job compilation policies**: Adds `EmberJobCompilationAttribute` with `Auto`, `Managed`, `Burst`, and `BurstHotUpdate` modes, selectable at assembly, system-base, or concrete-system scope.
+- **HybridCLR policy**: AOT systems can use regular Burst, standard hot-update assemblies can explicitly select `Managed`, and HybridCLR editions that support hot-update Burst can select `BurstHotUpdate` with a version salt. Same-assembly source changes automatically change the generated entry point.
+
+### Changed
+- **Optional Burst dependency**: `Ember.dll` does not reference `Unity.Burst` directly. Consumer assemblies containing Ember job systems must directly reference `Unity.Burst` in their asmdef to generate Burst entry points; `Auto` retains the compatible generic Unity Jobs path when that reference is absent.
+- **Stable component slot order**: Runtime and generated code now sort non-tag component columns by assembly name and component metadata name, preventing cross-assembly slot drift.
+
+### Fixed
+- **Explicit policies do not silently fall back**: `Burst` and `BurstHotUpdate` produce clear compile-time or system-initialization errors when a scheduler cannot be generated or resolved. Concrete generic systems, inaccessible types, and missing Burst references have dedicated diagnostics.
+- **Fully qualified scheduling**: Generated code calls `Unity.Jobs.IJobParallelForExtensions.Schedule` through its fully qualified name so consumer extension methods cannot hijack the execution path.
+
 ## [1.4.1] — Unity Bridge PlayMode Auto-Recovery
 
 ### Fixed

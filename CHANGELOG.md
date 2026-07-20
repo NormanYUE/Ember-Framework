@@ -2,6 +2,87 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.3] — MCP 安全序列化修复
+
+### Fixed
+- **MCP singleton 字段序列化递归崩溃**：`get_singleton` / `get_singletons(includeFields=true)` 现在通过安全 serializer 输出字段，包含最大递归深度、引用循环保护和字段读取异常摘要，避免 Native 容器或复杂引用图导致 Unity 主线程栈溢出。
+- **Unity Native 容器摘要输出**：`NativeArray<>`、`NativeList<>`、`NativeParallel*` 等 `Unity.Collections` 容器不再被反射深展开，只输出类型、`isCreated`、`length`、`capacity` 等可安全读取的摘要字段。
+
+### Changed
+- **`get_singletons` 默认不展开字段**：默认 `includeFields=false`，需要读取字段时必须显式传 `includeFields=true`。高风险运行时状态建议优先使用专门命令，例如 `get_buffer`。
+
+## [1.6.2] — 稳健性强化与并行热路径优化
+
+### Perf
+- **TickParallelLayer 热路径合并**：并行层 schedule 与 cleanup 段的 `BeginSystemExecution`/`EndSystemExecution` 调用从每系统每帧 4 次减为 2 次，消除冗余的 system 上下文包裹。
+- **ComponentPackColumnCache 缓存统一**：移除 `EnsureColumn` 的 stale-count 快速路径，始终以 `chunk.Count` 保活。
+
+### Fixed
+- **Chunk.GetReadOnlyColumn 丢失内联**：恢复 `[MethodImpl(MethodImplOptions.AggressiveInlining)]`。
+- **SystemTicker.Tick 已释放 world 抛异常**：`world.IsDisposed` 从静默 `return` 改为 `ObjectDisposedException`，避免已释放 world 继续被 tick 的隐藏错误。
+
+### Changed
+- **ComponentMask.Clone**：新增深拷贝方法，Archetype/DeferredCreate/FlushDeferredCreates/BatchMigration 等字典键位置统一使用 Clone 保护。
+- **Chunk 原生指针安全守卫**：`PointerViewSafetyState` generation 追踪，Chunk 释放/重置时递增，`ChunkColumn<T>`/`ReadOnlyChunkColumn<T>` 访问时校验，防止 Dangling pointer。
+- **ECB 回放重入保护**：`World.Playback` 增加 `m_PlaybackDepth` 计数器 + 异常报嵌套；`CreateCommandBuffer` 也检查重入。
+- **ECSManager.Tick 前置校验**：增加 World null / disposed / tickerIndex 越界三重检查。
+- **DependencyGraph 无声明 barrier**：移除全 undeclared 单层 fast path，未声明系统现通过 `IsBarrier` 统一处理，未声明的 JobSystem 之间不再误放在同一并行层。
+
+### Added
+- **BufferSpan 过期防护测试**：Buffer 增长/清空/销毁后 span 访问抛出 `InvalidOperationException`。
+- **ComponentMask.Clone 测试**：独立拷贝测试 + 内联仅读拷贝 + 空掩码拷贝。
+- **DependencyGraph 边界测试**：未声明系统独占层 + barrier 打断声明系统层拆分。
+- **SystemProfile.ExpandGroup 测试**：叶子展开/嵌套展开/空组/重复忽略/与 InsertBefore 组合。
+
+## [1.6.1] — 修复并行层 JobHandle 安全句柄回归
+
+### Fixed
+- **并行层 JobHandle 合并安全句柄缺失**：`TickParallelLayer` 在 1.6.0 中使用 `NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray` 收集 JobHandle 后一次性合并，但该数组缺少有效的 `AtomicSafetyHandle`，在 Unity 2022.3 + Burst 运行时触发 `AtomicSafetyHandle.CheckReadAndThrow` 失败。现改为使用 `Allocator.Temp` 分配真正的 `NativeArray<JobHandle>`，确保 `JobHandle.CombineDependencies` 拥有合法 safety handle，并立即 dispose。
+
+## [1.6.0] — 稳健性与高性能优化
+
+### Added
+- **SystemProfile group 展开**：新增 `SystemProfile.ExpandGroup<T>()`，可把 `SystemGroup` 的叶子系统一次性展开到 profile 中，方便在 profile 里对 group 内系统做增删替换。
+- **Source Generator 组件诊断**：组件注册生成器现在在编译期报告 `EMBER015`–`EMBER018` 诊断，包括实现多个 kind 接口、未实现 kind 接口、非 unmanaged struct、tag 组件包含实例字段。
+
+### Changed
+- **SystemGroup.Configure 过时提示**：`SystemGroup.Configure(SystemTicker)` 标记为 `[Obsolete]`（error: false），为将来改为 abstract 提供迁移期，避免直接破坏现有 group 代码。
+- **组件注册错误信息**：`ComponentTypeRegistry.GetInfo` 在未注册或 ID 越界时给出更明确的错误说明，提示检查 kind 接口、Source Generator 生成结果和程序集加载时机。
+- **README MCP 示例**：修正包 README 中把 `ember_execute` 命令误写成独立工具名（`ember_get_entity`、`ember_create_entity` 等）的示例，统一为 `ember_execute` 的 `commands` 数组格式。
+
+### Perf
+- **TickParallelLayer 批量合并 JobHandle**：并行层把循环内的 `JobHandle.CombineDependencies` 改为收集所有 handle 后一次性合并，减少冗余合并开销。
+- **AccessDeclaration 缓存**：`SystemTicker` 在 Init 阶段缓存每个系统的 `ReadMask`/`WriteMask` 等声明，Tick 热路径不再重复 `GetAccessDeclaration`。
+- **并行层实体计数缓存**：诊断模式下每 tick 缓存实体计数，避免多个系统重复全量查询。
+- **DependencyGraph 层构建 O(n³)→O(n·c)**：使用 `lastReadLayer`/`lastWriteLayer` 数组替代每轮 O(n) 扫描，构建复杂度从 O(n³) 降到 O(n·c)。
+- **ComponentTypeInfo 排序缓存**：新增缓存的 `AssemblyName` 和 `FullName` 属性，减少 chunk/列排序时的反射开销。
+- **CreateArchetype 单次枚举**：从两次组件 ID 枚举改为一次 `List<ComponentTypeId>` 收集，减少 archetype 创建时的遍历。
+- **RecordMask set bits 遍历**：`SystemContext.RecordMask` 改为遍历 mask 的 set bits 而非整个 `ComponentTypeRegistry.Count`。
+- **EntityQuery 强哈希**：`GetHashCode` 改为与 `EntityQueryKey` 一致的质数混合算法，降低查询缓存冲突。
+- **GetChunks 跳过冗余校验**：缓存未命中路径移除重复的 `query.Matches` 校验。
+
+### Fixed
+- **ECB 播放异常安全**：`SystemContext.EndTick` 在 ECB 播放失败时 dispose 旧 buffer 并创建新 buffer，避免残留不可播放命令。
+- **ECB temp-entity 索引溢出**：`EntityCommandBuffer.CreateEntity` 在 `m_NextTempIndex == int.MinValue` 时抛明确异常。
+- **并行层 cleanup 独立 playback**：`TickParallelLayer` cleanup 段的 `playbackDeferredChanges` 仅在成功进入 system 上下文且无并行错误时回放，避免失败路径下残留 ECB 被错误播放。
+- **FlushDeferredCreates 结构变更阻断**：`World.Query.cs` 在 `FlushDeferredCreates` 开头调用 `m_Safety.BeforeStructuralChange()`，确保结构变更安全。
+- **WorldSafety 并行层嵌套防护**：`BeginParallelLayer` 增加 `m_InParallelLayer` 嵌套检查，防止并行层嵌套进入。
+
+## [1.5.0] — Burst Job 编译策略
+
+### Added
+- **生成式 Burst 调度入口**：Source Generator 为可访问的具体 `JobSystem<TJob>` 生成非泛型 `IJobParallelFor` 和直接调度方法。运行时只在系统初始化时解析并缓存强类型 delegate，稳定 Tick 路径不使用反射且不产生 managed allocation。
+- **Job 编译策略**：新增 `EmberJobCompilationAttribute` 与 `Auto`、`Managed`、`Burst`、`BurstHotUpdate` 四种模式，可在程序集、系统基类或具体系统上选择 Unity Jobs/Burst 路径。
+- **HybridCLR 策略**：AOT 系统可使用普通 Burst；标准热更新程序集可显式使用 `Managed`；支持热更新 Burst 的 HybridCLR 版本可使用带版本盐的 `BurstHotUpdate`，同程序集源码变化会自动改变生成入口。
+
+### Changed
+- **可选 Burst 依赖**：`Ember.dll` 不直接引用 `Unity.Burst`。包含 Ember JobSystem 的消费程序集需要在 asmdef 中直接引用 `Unity.Burst` 才会生成 Burst 入口；`Auto` 在缺少引用时保留兼容的泛型 Unity Jobs 路径。
+- **稳定列槽顺序**：运行时和生成器统一按程序集名与组件 metadata name 排序非 tag 组件列，避免跨程序集组件访问槽漂移。
+
+### Fixed
+- **显式策略不静默降级**：`Burst` / `BurstHotUpdate` 无法生成或解析调度入口时在编译或系统初始化阶段给出明确错误；具体泛型系统、不可访问类型和缺失 Burst 引用均有对应诊断。
+- **调度调用限定**：生成代码通过完全限定的 `Unity.Jobs.IJobParallelForExtensions.Schedule` 调度，避免消费程序集中的同名扩展方法劫持执行路径。
+
 ## [1.4.1] — Unity Bridge PlayMode 自动恢复
 
 ### Fixed

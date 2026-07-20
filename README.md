@@ -449,7 +449,31 @@ public class SpawnMinionSystem : SystemBase
 
 ### 4.8 并行 System（JobSystem&lt;TJob&gt;）
 
-继承 `JobSystem<TJob>` 声明读写访问 + CompileJob，框架自动 IJobParallelFor 按 Chunk 并行调度（**零分配**）。
+继承 `JobSystem<TJob>` 声明读写访问并实现 `CompileJob`，框架会按 Chunk 通过 Unity Jobs 并行调度。消费程序集直接引用 `Unity.Burst` 时，Source Generator 会为具体系统生成非泛型 Burst 入口；稳定 Tick 路径复用缓存 delegate 和调度缓冲，**零 managed allocation**。
+
+包含 Ember JobSystem 的 asmdef 必须显式引用 Burst。Unity asmdef 引用不传递，仅安装 `com.unity.collections` 不足以让生成器看到 `Unity.Burst`：
+
+```json
+{
+  "references": [
+    "Ember",
+    "Unity.Collections",
+    "Unity.Burst"
+  ]
+}
+```
+
+默认 `Auto` 在可见 `Unity.Burst` 时生成 Burst 入口，否则使用兼容的泛型 Unity Jobs 路径。可在程序集或系统类型上显式选择策略：
+
+```csharp
+// 以下四项是互斥示例，每个程序集只选择一项。
+[assembly: EmberJobCompilation(EmberJobCompilationMode.Auto)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.Managed)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.Burst)]
+// [assembly: EmberJobCompilation(EmberJobCompilationMode.BurstHotUpdate, "battle-jobs-v1")]
+```
+
+`Burst` / `BurstHotUpdate` 不允许静默回退，缺少直接 Burst 引用或无法生成入口会产生明确错误。具体泛型系统无法生成唯一的非泛型入口：`Auto` 会给出警告并回退，显式 Burst 策略会报错；需要 Burst 时应增加非泛型具体子类。
 
 ```csharp
 public class MovementSystem : JobSystem<MoveJob>
@@ -464,21 +488,20 @@ public class MovementSystem : JobSystem<MoveJob>
         return new MoveJob { DeltaTime = ctx.DeltaTime };
     }
 
-    struct MoveJob : IEmberChunkJob
+    public struct MoveJob : IEmberChunkJob
     {
         public float DeltaTime;
 
         // meta 含 BufferPtr、EntityCount、Comp0-3Offset/Stride
-        // Comp0 = Position（TypeId 最小）、Comp1 = Velocity
+        // 列槽按程序集名 + 组件 metadata name 稳定排序
         public void Execute(ChunkJobMeta meta, int chunkIndex)
         {
-            // Source Generator 自动生成 MovementChunkMeta，含 Position/Velocity 类型安全访问
-            // 按 ComponentTypeId 升序 → Position(Comp0), Velocity(Comp1)
-            var m = MovementChunkMeta.Wrap(meta);
+            // Source Generator 自动生成 MovementSystemChunkMeta
+            var m = MovementSystemChunkMeta.Wrap(meta);
             for (int i = 0; i < m.EntityCount; i++)
             {
                 ref var pos = ref m.Position(i);
-                var vel = m.Velocity_RO(i);
+                ref readonly var vel = ref m.Velocity(i);
                 pos.X += vel.X * DeltaTime;
             }
         }
@@ -494,14 +517,9 @@ EcsSystem（共享生命周期）
        └── JobSystem<T>  — CompileJob → IJobParallelFor（零分配）
 ```
 
-**调度路径：** `Schedule<T>` → `ChunkJobWrapper<T> : IJobParallelFor` → Unity Job System 按 Chunk 并行 → `Complete()` 阻塞返回。零 delegate/closure/装箱。
+**调度路径：** Burst 可用时走生成的具体非泛型 `IJobParallelFor`；否则走 `ChunkJobWrapper<TJob>` 兼容路径。两者都复用 `ChunkJobScheduleCache`，无每帧 delegate、closure 或装箱。
 
-**类层次：**
-```
-EcsSystem（共享生命周期）
-  ├── SystemBase  — OnTick 手写循环（单线程）
-  └── JobSystemBase — DeclareAccess + CompileJob → IEmberChunkJob（并行）
-```
+**HybridCLR：** AOT 程序集使用普通 `Burst`；标准热更新程序集使用 `Managed`，仍由 Unity Jobs 调度但不进行 Burst 编译；支持热更新 Burst 的 HybridCLR 版本可使用 `BurstHotUpdate`。外部 Burst 依赖变化时必须递增版本盐，例如从 `battle-jobs-v1` 改为 `battle-jobs-v2`。
 
 `SystemBase` 未声明访问时自动保守策略（与所有系统互斥）。
 
@@ -1238,22 +1256,24 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 Example: `{"op": "query_entities", "all": ["Position"], "limit": 10}`
 Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSystem"}`
 
+`get_singletons` 默认不展开字段。需要字段时显式传 `{"op":"get_singletons","includeFields":true}`；含 `NativeArray<>`、`NativeList<>`、`NativeParallel*` 等 Unity Native 容器的字段只返回安全摘要，避免调试查询递归展开运行时容器。
+
 ### 14.4 使用示例
 
 以下是 AI 客户端中一次典型的交互流程：
 
 > **用户**: 查询所有有 Health 组件的实体，看看谁血量低  
-> **AI** 调用 `ember_execute({"op":"query_entities","all":["Health"]})`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"query_entities","all":["Health"]}]})`  
 > → 返回 3 个实体，实体 #1 的 Health.Current = 80，实体 #2 的 Health.Current = 5  
 >
 > **用户**: 实体 #2 快死了，看看它的详细信息  
-> **AI** 调用 `ember_get_entity(entityIndex=2)`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"get_entity_full","entityIndex":2}]})`  
 > → 返回 Entity #2 的全部组件：Health { Current: 5, Max: 100 }，Position { X: 10, Y: 2, Z: 0 }，DeadTag（标记）  
 >
 > **用户**: 给我在它旁边（X+3）创建一个新实体，带相同的组件  
-> **AI** 调用 `ember_create_entity(components=["Health","Position"])` → 拿到新 entityIndex=15  
-> **AI** 调用 `ember_set_component(15, "Health", {"Current":100,"Max":100})`  
-> **AI** 调用 `ember_set_component(15, "Position", {"X":13,"Y":2,"Z":0})`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"create_entity","components":["Health","Position"]}]})` → 拿到新 entityIndex=15  
+> **AI** 调用 `ember_execute({"commands":[{"op":"set_component","entityIndex":15,"component":"Health","value":{"Current":100,"Max":100}}]})`  
+> **AI** 调用 `ember_execute({"commands":[{"op":"set_component","entityIndex":15,"component":"Position","value":{"X":13,"Y":2,"Z":0}}]})`  
 > → 实体 #15 创建完成
 
 ### 14.5 调试与故障排查
