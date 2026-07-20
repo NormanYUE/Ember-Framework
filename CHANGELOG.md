@@ -2,6 +2,12 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.4] — ArchetypeIndex All 查询修复
+
+### Fixed
+- **ArchetypeIndex All 查询假阳性**：当 `EntityQuery.All` 中某个必需组件尚未出现在任何 Archetype 中，且该组件不是遍历到的第一个组件时，`ArchetypeIndex.Query` 现在会清空结果并返回空匹配，避免保留前置组件的部分交集。
+- **QueryCache 错误缓存防护**：新增回归测试覆盖缺失组件位于 `All` 首位、中间、末尾、`All + Any + None` 组合，以及 `QueryCache.Rebuild` 不缓存不完整查询结果。
+
 ## [1.6.3] — MCP 安全序列化修复
 
 ### Fixed

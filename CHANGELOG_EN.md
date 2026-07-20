@@ -2,6 +2,12 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.6.4] — ArchetypeIndex All Query Fix
+
+### Fixed
+- **ArchetypeIndex All-query false positives**: When a required component in `EntityQuery.All` has never appeared in any archetype and is not the first iterated component, `ArchetypeIndex.Query` now clears the result before returning an empty match set, preventing partial intersections from earlier components from leaking into the result.
+- **QueryCache regression coverage**: Added tests for missing components at the beginning, middle, and end of `All`, combined `All + Any + None` queries, and `QueryCache.Rebuild` not caching incomplete query results.
+
 ## [1.6.3] — MCP Safe Serialization Fix
 
 ### Fixed
