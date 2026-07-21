@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.9.0] — Entity 调试 UI 增强
+
+### Added
+- **EntitiesWindow**：可浏览所有实体，按组件过滤，分页显示；支持配置显示列（Entity、Archetype、Chunk、Row、ArchFill、ChunkFill、Bytes、Systems）。
+- **EntityInspectorWindow**：单个 Entity 详情窗口，采用标签页式 Section 容器。
+- **组件数据展开**：组件字段值、Buffer 元素列表以可折叠列表形式展示。
+- **位置与内存信息**：显示 Entity 所在 Archetype、Chunk、Row、Archetype 填充率、Chunk 填充率、Entity 占用字节数以及 Placed 状态。
+- **系统访问信息**：显示静态匹配到该 Entity 的系统数量与列表。
+- **EntityDebugInfoProvider**：统一提供 Entity 位置、字节估算、系统匹配、Buffer 元素等调试数据。
+
 ## [1.8.0] — 可配置 Chunk 池与 ECB 批量回放
 
 ### Added

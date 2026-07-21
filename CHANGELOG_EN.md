@@ -2,6 +2,16 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.9.0] — Entity Debug UI Enhancements
+
+### Added
+- **EntitiesWindow**: Browse all entities, filter by component, and paginate; configurable columns (Entity, Archetype, Chunk, Row, ArchFill, ChunkFill, Bytes, Systems).
+- **EntityInspectorWindow**: Single-entity detail window with a tabbed section container.
+- **Component data expansion**: Component field values and Buffer element lists shown as foldable lists.
+- **Location & memory info**: Shows the entity's Archetype, Chunk, Row, archetype fill rate, chunk fill rate, estimated byte size, and Placed status.
+- **System access info**: Shows the count and list of systems that statically match the entity.
+- **EntityDebugInfoProvider**: Unified provider for entity location, byte estimation, system matching, and buffer element enumeration.
+
 ## [1.8.0] — Configurable Chunk Pool & ECB Batch Playback
 
 ### Added
