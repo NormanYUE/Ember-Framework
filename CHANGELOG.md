@@ -2,6 +2,17 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.8.0] — 可配置 Chunk 池与 ECB 批量回放
+
+### Added
+- **每个 Archetype 的空闲 Chunk 池大小可配置**：新增 `World.MaxPooledChunksPerArchetype` 属性，可限制每个 Archetype 保留的空闲 Chunk 数量；默认值为 8，设为 0 可完全禁用池化。
+- **Chunk 池诊断接口**：新增 `World.PooledChunkCount` 只读属性与 `World.TrimExcess()` 方法，用于监控和立即释放所有 Archetype 的空闲 Chunk。
+- **ECB 批量回放模式**：`EntityCommandBuffer` 新增内部 `BurstBatch` 回放路径，当命令数达到阈值时自动将相同类型的 Add/Remove/Destroy/Create 操作分批合并执行，提升高频结构变更场景的回放吞吐量。
+
+### Changed
+- **AppendChunk 优先复用池化 Chunk**：创建新 Chunk 前先尝试从 `m_EmptyChunkPool` 取出已有 Chunk，减少 Native 内存分配。
+- **EnsureFreeRows 支持失败回滚**：批量迁移预分配 Chunk 时若发生异常，会恢复原始的 Chunk 列表、池数量和 first-non-full 索引。
+
 ## [1.7.0] — System Graph Visualization & Performance Hotspots
 
 ### Added

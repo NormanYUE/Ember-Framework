@@ -22,7 +22,7 @@
     }
   ],
   "dependencies": {
-    "com.ember.ecs": "1.0.1"
+    "com.ember.ecs": "1.8.0"
   }
 }
 ```

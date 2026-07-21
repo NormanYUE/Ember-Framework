@@ -2,6 +2,17 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.8.0] — Configurable Chunk Pool & ECB Batch Playback
+
+### Added
+- **Configurable per-Archetype empty Chunk pool size**: Added the `World.MaxPooledChunksPerArchetype` property to limit how many empty Chunks each Archetype retains; defaults to 8, and can be set to 0 to disable pooling entirely.
+- **Chunk pool diagnostics**: Added read-only `World.PooledChunkCount` and `World.TrimExcess()` to inspect and immediately release all pooled empty Chunks across Archetypes.
+- **ECB batch playback mode**: `EntityCommandBuffer` now has an internal `BurstBatch` playback path that automatically batches Add/Remove/Destroy/Create commands of the same type once the threshold is reached, improving playback throughput in high-frequency structural-change scenarios.
+
+### Changed
+- **AppendChunk prefers pooled Chunks**: Before allocating a new Chunk, the runtime now tries to reuse one from `m_EmptyChunkPool`, reducing Native memory allocations.
+- **EnsureFreeRows supports failure rollback**: When bulk migration pre-allocates Chunks and an exception occurs, the original Chunk list, pool count, and first-non-full index are restored.
+
 ## [1.7.0] — System Graph Visualization & Performance Hotspots
 
 ### Added
