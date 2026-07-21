@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.9.3] — 组件窗口布局修复
+
+### Fixed
+- **ComponentTypesWindow 详情遮挡列表**：改为左右分栏布局，左侧固定宽度的组件列表独立滚动，右侧选中组件详情独立滚动，避免详情块挤压或遮挡列表。
+
 ## [1.9.2] — 移除 MCP 系统依赖图 HTML 导出
 
 ### Removed

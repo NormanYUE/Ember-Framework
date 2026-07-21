@@ -2,6 +2,11 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.9.3] — Component Types Window Layout Fix
+
+### Fixed
+- **ComponentTypesWindow detail panel no longer overlaps the list**: Switched to a side-by-side layout with a fixed-width scrollable component list on the left and an independently scrollable detail panel on the right.
+
 ## [1.9.2] — Remove MCP System Graph HTML Export
 
 ### Removed
