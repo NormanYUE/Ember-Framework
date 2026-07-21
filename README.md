@@ -1238,7 +1238,7 @@ Skills 是项目级文件，适合随 Unity 项目提交和共享；安装后重
 | `--port <n>` | 手动指定端口。通常不需要；只有在状态文件不可用且明确知道端口时使用 |
 | `--status-dir <path>` | 指定 Bridge status 文件目录，默认 `~/.ember` |
 
-### 14.3 Command Reference (55 commands via `ember_execute`)
+### 14.3 Command Reference (54 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
@@ -1246,7 +1246,7 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 **Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (13):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph, export_system_graph
+**Diagnostic (12):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph
 **System (3):** system_status, get_system_info, advance_frame
 **Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
