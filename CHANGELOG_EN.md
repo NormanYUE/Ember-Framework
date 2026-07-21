@@ -2,6 +2,13 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.9.1] — MCP Export HTML Fix & Version Sync
+
+### Fixed
+- **Missing MCP `export_system_graph` command**: Added `Handle_export_system_graph` in `EmberBridgeCommands` to generate a self-contained HTML/SVG system dependency graph file.
+- **MCP capabilities version out of sync**: `capabilities` now returns `version` from `EmberBridge.PackageVersion` to stay consistent with the package version.
+- **Dependency graph debug view not exposed to MCP**: Added `ECSManager.GetDependencyGraphDebugView(int tickerIndex)` for the export command.
+
 ## [1.9.0] — Entity Debug UI Enhancements
 
 ### Added

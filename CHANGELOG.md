@@ -2,6 +2,13 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.9.1] — MCP 导出 HTML 修复与版本同步
+
+### Fixed
+- **MCP `export_system_graph` 命令缺失**：`EmberBridgeCommands` 新增 `Handle_export_system_graph`，生成自包含 HTML/SVG 系统依赖图文件。
+- **MCP capabilities 版本不同步**：`capabilities` 返回的 `version` 改为读取 `EmberBridge.PackageVersion`，避免与包版本不一致。
+- **依赖图调试视图未暴露给 MCP**：`ECSManager` 新增 `GetDependencyGraphDebugView(int tickerIndex)`，供导出命令使用。
+
 ## [1.9.0] — Entity 调试 UI 增强
 
 ### Added
