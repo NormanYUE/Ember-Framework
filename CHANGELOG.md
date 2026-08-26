@@ -2,6 +2,21 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.10.0] — 模板批量实例化
+
+### Added
+- **零结果数组分配的模板批量 API**：新增 `World.Instantiate(string templateName, Span<Entity> roots)`，一次预检实体上限、Singleton 与 Chunk 预算，按最终 Archetype 预留所有行，并把根实体写入调用方复用的 Span。
+- **模板实例化 Profiler Marker**：新增 `Ember.World.InstantiateBatch`，用于在 Unity Profiler 中独立观察批量模板创建成本。
+
+### Changed
+- **模板计划预编译**：注册时递归冻结完整模板树并缓存 preorder plan；子实体直接创建到包含 `ParentComponent` 的最终 Archetype，避免逐实体二次迁移。
+- **EntityRecord 默认容量调整为 512**：将常见 240 实体突发跨过旧 256 阈值时的托管数组扩容移到 World 初始化阶段。
+- **逐根完整通知**：每棵模板树完成默认值和层级初始化后再发送 created 回调；回调期间禁止结构变更，避免消费批量预留或破坏后续 root。
+
+### Fixed
+- **批量初始化失败回滚**：默认值、层级或 row 发布失败时，逆序回滚当前未通知 root，撤销 singleton、hierarchy、chunk row、record 和复用 index；rollback 失败会保留完整聚合异常。
+- **注册失败不再冻结模板**：先成功编译模板 plan，再冻结并登记；可恢复的编译失败后模板仍可修改。
+
 ## [1.9.3] — 组件窗口布局修复
 
 ### Fixed

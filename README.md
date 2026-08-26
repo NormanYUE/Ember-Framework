@@ -268,6 +268,25 @@ bool alive = world.IsAlive(entityIndex);
 Entity entity = world.GetEntity(entityIndex); // index → Entity 句柄
 ```
 
+### 3.5 模板与批量实例化
+
+注册后的 `EntityTemplate` 会被冻结，并预编译完整子树计划。单个实例继续使用原 API；批量场景应复用调用方数组，避免为返回值分配新数组：
+
+```csharp
+var projectileTemplate = new EntityTemplate("Projectile")
+    .Add(new Position { X = 0, Y = 0 })
+    .Add(new Velocity { X = 0, Y = 12 });
+
+world.RegisterTemplate(projectileTemplate);
+
+Entity projectile = world.Instantiate("Projectile");
+
+var roots = new Entity[240]; // 建议长期复用
+world.Instantiate("Projectile", roots.AsSpan());
+```
+
+批量 API 会一次性预检实体上限、Singleton 和 Chunk 预算，并按模板树的最终 Archetype 预留行。每棵树完成默认组件与父子层级初始化后才发送 created 回调。批量 created 回调期间禁止创建/销毁实体、增删组件或释放 World；listener 抛异常时当前 root 保留，后续 roots 不创建。
+
 ---
 
 ## 4. 系统（System）

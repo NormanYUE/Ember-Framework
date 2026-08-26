@@ -2,6 +2,21 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.10.0] — Batch Template Instantiation
+
+### Added
+- **Caller-buffer batch template API**: Added `World.Instantiate(string templateName, Span<Entity> roots)`. It validates entity limits, singleton ownership, and chunk budget once, reserves final-archetype rows in bulk, and writes root handles into a reusable caller-owned span.
+- **Template instantiation profiler marker**: Added `Ember.World.InstantiateBatch` for isolated batch-template timing in the Unity Profiler.
+
+### Changed
+- **Precompiled template plans**: Registration recursively freezes the complete template tree and caches a preorder plan. Child entities are created directly in their final archetype with `ParentComponent`, avoiding per-entity follow-up migration.
+- **Default EntityRecord capacity raised to 512**: Moves the managed-array growth seen when a common 240-entity burst crosses the former 256 threshold into World initialization.
+- **Complete per-root notification**: Created callbacks run only after one template tree has complete defaults and hierarchy. Structural changes are blocked during those callbacks so they cannot consume batch reservations or invalidate later roots.
+
+### Fixed
+- **Rollback for failed batch initialization**: Failures while publishing rows, defaults, or hierarchy reverse-roll back the current unnotified root, including singleton ownership, hierarchy links, chunk rows, records, and reused indices. Rollback failures preserve all errors in an aggregate.
+- **Failed registration no longer freezes templates**: The plan compiles before recursive freeze and insertion, so recoverable compilation failures leave the template mutable.
+
 ## [1.9.3] — Component Types Window Layout Fix
 
 ### Fixed

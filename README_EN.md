@@ -267,6 +267,25 @@ bool alive = world.IsAlive(entityIndex);
 Entity entity = world.GetEntity(entityIndex); // index → Entity handle
 ```
 
+### 3.5 Templates and Batch Instantiation
+
+Registered `EntityTemplate` trees are frozen and precompiled. Keep using the existing API for one instance; for batches, reuse a caller-owned array so no result array is allocated per call:
+
+```csharp
+var projectileTemplate = new EntityTemplate("Projectile")
+    .Add(new Position { X = 0, Y = 0 })
+    .Add(new Velocity { X = 0, Y = 12 });
+
+world.RegisterTemplate(projectileTemplate);
+
+Entity projectile = world.Instantiate("Projectile");
+
+var roots = new Entity[240]; // Keep and reuse this buffer
+world.Instantiate("Projectile", roots.AsSpan());
+```
+
+The batch API validates entity limits, singleton ownership, and chunk budget once, then reserves rows for the final archetypes of the complete template tree. Created callbacks run only after each root has complete defaults and hierarchy. Creating or destroying entities, adding or removing components, and disposing the World are blocked during batch-created callbacks. If a listener throws, the current root remains committed and later roots are not created.
+
 ---
 
 ## 4. Systems
