@@ -22,7 +22,7 @@
     }
   ],
   "dependencies": {
-    "com.ember.ecs": "1.0.1"
+    "com.ember.ecs": "1.8.0"
   }
 }
 ```
@@ -267,6 +267,25 @@ int alive = world.GetAliveCount();
 bool alive = world.IsAlive(entityIndex);
 Entity entity = world.GetEntity(entityIndex); // index → Entity 句柄
 ```
+
+### 3.5 模板与批量实例化
+
+注册后的 `EntityTemplate` 会被冻结，并预编译完整子树计划。单个实例继续使用原 API；批量场景应复用调用方数组，避免为返回值分配新数组：
+
+```csharp
+var projectileTemplate = new EntityTemplate("Projectile")
+    .Add(new Position { X = 0, Y = 0 })
+    .Add(new Velocity { X = 0, Y = 12 });
+
+world.RegisterTemplate(projectileTemplate);
+
+Entity projectile = world.Instantiate("Projectile");
+
+var roots = new Entity[240]; // 建议长期复用
+world.Instantiate("Projectile", roots.AsSpan());
+```
+
+批量 API 会一次性预检实体上限、Singleton 和 Chunk 预算，并按模板树的最终 Archetype 预留行。每棵树完成默认组件与父子层级初始化后才发送 created 回调。批量 created 回调期间禁止创建/销毁实体、增删组件或释放 World；listener 抛异常时当前 root 保留，后续 roots 不创建。
 
 ---
 
@@ -1246,8 +1265,8 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 **Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (11):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy
-**System (4):** system_status, get_system_info, get_dependency_graph, advance_frame
+**Diagnostic (12):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph
+**System (3):** system_status, get_system_info, advance_frame
 **Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
 **Write Safety (1):** safe_write_batch

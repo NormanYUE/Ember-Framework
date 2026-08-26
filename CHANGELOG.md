@@ -2,6 +2,67 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.10.0] — 模板批量实例化
+
+### Added
+- **零结果数组分配的模板批量 API**：新增 `World.Instantiate(string templateName, Span<Entity> roots)`，一次预检实体上限、Singleton 与 Chunk 预算，按最终 Archetype 预留所有行，并把根实体写入调用方复用的 Span。
+- **模板实例化 Profiler Marker**：新增 `Ember.World.InstantiateBatch`，用于在 Unity Profiler 中独立观察批量模板创建成本。
+
+### Changed
+- **模板计划预编译**：注册时递归冻结完整模板树并缓存 preorder plan；子实体直接创建到包含 `ParentComponent` 的最终 Archetype，避免逐实体二次迁移。
+- **EntityRecord 默认容量调整为 512**：将常见 240 实体突发跨过旧 256 阈值时的托管数组扩容移到 World 初始化阶段。
+- **逐根完整通知**：每棵模板树完成默认值和层级初始化后再发送 created 回调；回调期间禁止结构变更，避免消费批量预留或破坏后续 root。
+
+### Fixed
+- **批量初始化失败回滚**：默认值、层级或 row 发布失败时，逆序回滚当前未通知 root，撤销 singleton、hierarchy、chunk row、record 和复用 index；rollback 失败会保留完整聚合异常。
+- **注册失败不再冻结模板**：先成功编译模板 plan，再冻结并登记；可恢复的编译失败后模板仍可修改。
+
+## [1.9.3] — 组件窗口布局修复
+
+### Fixed
+- **ComponentTypesWindow 详情遮挡列表**：改为左右分栏布局，左侧固定宽度的组件列表独立滚动，右侧选中组件详情独立滚动，避免详情块挤压或遮挡列表。
+
+## [1.9.2] — 移除 MCP 系统依赖图 HTML 导出
+
+### Removed
+- **移除 MCP `export_system_graph` 命令与 HTML 导出**：删除 `EmberBridgeCommands.Handle_export_system_graph`、`BuildSystemGraphHtml` 及 `ECSManager.GetDependencyGraphDebugView(int tickerIndex)`；`SystemsWindow` 不再显示 "Export Graph HTML" 按钮。
+
+## [1.9.1] — MCP 版本同步
+
+### Fixed
+- **MCP capabilities 版本不同步**：`capabilities` 返回的 `version` 改为读取 `EmberBridge.PackageVersion`，避免与包版本不一致。
+
+## [1.9.0] — Entity 调试 UI 增强
+
+### Added
+- **EntitiesWindow**：可浏览所有实体，按组件过滤，分页显示；支持配置显示列（Entity、Archetype、Chunk、Row、ArchFill、ChunkFill、Bytes、Systems）。
+- **EntityInspectorWindow**：单个 Entity 详情窗口，采用标签页式 Section 容器。
+- **组件数据展开**：组件字段值、Buffer 元素列表以可折叠列表形式展示。
+- **位置与内存信息**：显示 Entity 所在 Archetype、Chunk、Row、Archetype 填充率、Chunk 填充率、Entity 占用字节数以及 Placed 状态。
+- **系统访问信息**：显示静态匹配到该 Entity 的系统数量与列表。
+- **EntityDebugInfoProvider**：统一提供 Entity 位置、字节估算、系统匹配、Buffer 元素等调试数据。
+
+## [1.8.0] — 可配置 Chunk 池与 ECB 批量回放
+
+### Added
+- **每个 Archetype 的空闲 Chunk 池大小可配置**：新增 `World.MaxPooledChunksPerArchetype` 属性，可限制每个 Archetype 保留的空闲 Chunk 数量；默认值为 8，设为 0 可完全禁用池化。
+- **Chunk 池诊断接口**：新增 `World.PooledChunkCount` 只读属性与 `World.TrimExcess()` 方法，用于监控和立即释放所有 Archetype 的空闲 Chunk。
+- **ECB 批量回放模式**：`EntityCommandBuffer` 新增内部 `BurstBatch` 回放路径，当命令数达到阈值时自动将相同类型的 Add/Remove/Destroy/Create 操作分批合并执行，提升高频结构变更场景的回放吞吐量。
+
+### Changed
+- **AppendChunk 优先复用池化 Chunk**：创建新 Chunk 前先尝试从 `m_EmptyChunkPool` 取出已有 Chunk，减少 Native 内存分配。
+- **EnsureFreeRows 支持失败回滚**：批量迁移预分配 Chunk 时若发生异常，会恢复原始的 Chunk 列表、池数量和 first-non-full 索引。
+
+## [1.7.0] — System Graph Visualization & Performance Hotspots
+
+### Added
+- **Editor-only system dependency graph visualization**: Added `Ember.Diagnostics.Core` shared assembly with `SystemGraphReport`, `SystemGraphBuilder`, and `SystemGraphSvgRenderer` for pure .NET graph building and self-contained HTML/SVG rendering.
+- **`Profiler.Attach(ECSManager)` API**: Editor-only opt-in that attaches `EmberDiagnosticsService` and caches system dependency graph snapshots at 1-second intervals.
+- **Enhanced `get_dependency_graph` MCP command**: Now returns `systems`, `edges`, and `systemCount`/`edgeCount` while preserving legacy `layers` output; supports optional `includeMetrics`.
+- **New `export_system_graph` MCP command**: Exports a self-contained HTML file with inline SVG dependency graph and JavaScript tooltips to `Application.temporaryCachePath/EmberGraphs/` or an explicit `outputPath`.
+- **Systems Window performance hotspot coloring**: Graph nodes are tinted by average tick time (≥2ms red, ≥1ms orange, ≥0.5ms yellow) alongside existing access-validation colors.
+- **Systems Window "Export Graph HTML" button**: One-click export from the Editor window with Finder reveal.
+
 ## [1.6.4] — ArchetypeIndex All 查询修复
 
 ### Fixed

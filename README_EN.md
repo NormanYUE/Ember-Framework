@@ -22,7 +22,7 @@
     }
   ],
   "dependencies": {
-    "com.ember.ecs": "1.0.1"
+    "com.ember.ecs": "1.8.0"
   }
 }
 ```
@@ -266,6 +266,25 @@ int alive = world.GetAliveCount();
 bool alive = world.IsAlive(entityIndex);
 Entity entity = world.GetEntity(entityIndex); // index → Entity handle
 ```
+
+### 3.5 Templates and Batch Instantiation
+
+Registered `EntityTemplate` trees are frozen and precompiled. Keep using the existing API for one instance; for batches, reuse a caller-owned array so no result array is allocated per call:
+
+```csharp
+var projectileTemplate = new EntityTemplate("Projectile")
+    .Add(new Position { X = 0, Y = 0 })
+    .Add(new Velocity { X = 0, Y = 12 });
+
+world.RegisterTemplate(projectileTemplate);
+
+Entity projectile = world.Instantiate("Projectile");
+
+var roots = new Entity[240]; // Keep and reuse this buffer
+world.Instantiate("Projectile", roots.AsSpan());
+```
+
+The batch API validates entity limits, singleton ownership, and chunk budget once, then reserves rows for the final archetypes of the complete template tree. Created callbacks run only after each root has complete defaults and hierarchy. Creating or destroying entities, adding or removing components, and disposing the World are blocked during batch-created callbacks. If a listener throws, the current root remains committed and later roots are not created.
 
 ---
 
@@ -1248,8 +1267,8 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 **Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (11):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy
-**System (4):** system_status, get_system_info, get_dependency_graph, advance_frame
+**Diagnostic (12):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph
+**System (3):** system_status, get_system_info, advance_frame
 **Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
 **Write Safety (1):** safe_write_batch

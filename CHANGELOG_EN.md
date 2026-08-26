@@ -2,6 +2,67 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.10.0] — Batch Template Instantiation
+
+### Added
+- **Caller-buffer batch template API**: Added `World.Instantiate(string templateName, Span<Entity> roots)`. It validates entity limits, singleton ownership, and chunk budget once, reserves final-archetype rows in bulk, and writes root handles into a reusable caller-owned span.
+- **Template instantiation profiler marker**: Added `Ember.World.InstantiateBatch` for isolated batch-template timing in the Unity Profiler.
+
+### Changed
+- **Precompiled template plans**: Registration recursively freezes the complete template tree and caches a preorder plan. Child entities are created directly in their final archetype with `ParentComponent`, avoiding per-entity follow-up migration.
+- **Default EntityRecord capacity raised to 512**: Moves the managed-array growth seen when a common 240-entity burst crosses the former 256 threshold into World initialization.
+- **Complete per-root notification**: Created callbacks run only after one template tree has complete defaults and hierarchy. Structural changes are blocked during those callbacks so they cannot consume batch reservations or invalidate later roots.
+
+### Fixed
+- **Rollback for failed batch initialization**: Failures while publishing rows, defaults, or hierarchy reverse-roll back the current unnotified root, including singleton ownership, hierarchy links, chunk rows, records, and reused indices. Rollback failures preserve all errors in an aggregate.
+- **Failed registration no longer freezes templates**: The plan compiles before recursive freeze and insertion, so recoverable compilation failures leave the template mutable.
+
+## [1.9.3] — Component Types Window Layout Fix
+
+### Fixed
+- **ComponentTypesWindow detail panel no longer overlaps the list**: Switched to a side-by-side layout with a fixed-width scrollable component list on the left and an independently scrollable detail panel on the right.
+
+## [1.9.2] — Remove MCP System Graph HTML Export
+
+### Removed
+- **Remove MCP `export_system_graph` command and HTML export**: Deleted `EmberBridgeCommands.Handle_export_system_graph`, `BuildSystemGraphHtml`, and `ECSManager.GetDependencyGraphDebugView(int tickerIndex)`; `SystemsWindow` no longer shows the "Export Graph HTML" button.
+
+## [1.9.1] — MCP Version Sync
+
+### Fixed
+- **MCP capabilities version out of sync**: `capabilities` now returns `version` from `EmberBridge.PackageVersion` to stay consistent with the package version.
+
+## [1.9.0] — Entity Debug UI Enhancements
+
+### Added
+- **EntitiesWindow**: Browse all entities, filter by component, and paginate; configurable columns (Entity, Archetype, Chunk, Row, ArchFill, ChunkFill, Bytes, Systems).
+- **EntityInspectorWindow**: Single-entity detail window with a tabbed section container.
+- **Component data expansion**: Component field values and Buffer element lists shown as foldable lists.
+- **Location & memory info**: Shows the entity's Archetype, Chunk, Row, archetype fill rate, chunk fill rate, estimated byte size, and Placed status.
+- **System access info**: Shows the count and list of systems that statically match the entity.
+- **EntityDebugInfoProvider**: Unified provider for entity location, byte estimation, system matching, and buffer element enumeration.
+
+## [1.8.0] — Configurable Chunk Pool & ECB Batch Playback
+
+### Added
+- **Configurable per-Archetype empty Chunk pool size**: Added the `World.MaxPooledChunksPerArchetype` property to limit how many empty Chunks each Archetype retains; defaults to 8, and can be set to 0 to disable pooling entirely.
+- **Chunk pool diagnostics**: Added read-only `World.PooledChunkCount` and `World.TrimExcess()` to inspect and immediately release all pooled empty Chunks across Archetypes.
+- **ECB batch playback mode**: `EntityCommandBuffer` now has an internal `BurstBatch` playback path that automatically batches Add/Remove/Destroy/Create commands of the same type once the threshold is reached, improving playback throughput in high-frequency structural-change scenarios.
+
+### Changed
+- **AppendChunk prefers pooled Chunks**: Before allocating a new Chunk, the runtime now tries to reuse one from `m_EmptyChunkPool`, reducing Native memory allocations.
+- **EnsureFreeRows supports failure rollback**: When bulk migration pre-allocates Chunks and an exception occurs, the original Chunk list, pool count, and first-non-full index are restored.
+
+## [1.7.0] — System Graph Visualization & Performance Hotspots
+
+### Added
+- **Editor-only system dependency graph visualization**: Added the `Ember.Diagnostics.Core` shared assembly with `SystemGraphReport`, `SystemGraphBuilder`, and `SystemGraphSvgRenderer` for pure .NET graph building and self-contained HTML/SVG rendering.
+- **`Profiler.Attach(ECSManager)` API**: Editor-only opt-in that attaches `EmberDiagnosticsService` and caches system dependency graph snapshots at 1-second intervals.
+- **Enhanced `get_dependency_graph` MCP command**: Now returns `systems`, `edges`, and `systemCount`/`edgeCount` while preserving the legacy `layers` output; supports optional `includeMetrics`.
+- **New `export_system_graph` MCP command**: Exports a self-contained HTML file with an inline SVG dependency graph and JavaScript tooltips to `Application.temporaryCachePath/EmberGraphs/` or an explicit `outputPath`.
+- **Systems Window performance hotspot coloring**: Graph nodes are tinted by average tick time (≥2ms red, ≥1ms orange, ≥0.5ms yellow) alongside existing access-validation colors.
+- **Systems Window "Export Graph HTML" button**: One-click export from the Editor window with Finder reveal.
+
 ## [1.6.4] — ArchetypeIndex All Query Fix
 
 ### Fixed
