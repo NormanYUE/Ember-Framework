@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.10.1] — 随机访问热路径优化
+
+### Performance
+- **BufferStore 按类型直索引**：`GetBuffer` / `AddBufferElement` / `RemoveBufferElementAtSwapBack` / `SetBufferElement` / `GetBufferLength` 等独立缓冲区 API 的每次调用不再经过 `Dictionary<Type, …>` 查找；每种元素类型在进程内分配递增 ID，World 内以数组直索引返回已缓存的 `BufferStore<T>`。
+- **实体缓冲区元素少一次字典查找**：`AddBufferElement(Entity, T)` / `GetBufferElement` / `RemoveBufferElementAt` / `GetBufferElementCount` / `ClearBufferElements` 的存储叶子由“按实体再索引的字典”改为单 `List<T>` 包装，每次调用减少一次冗余哈希查找，并消除实体销毁后的孤儿条目；组件类型 ID 改用静态泛型缓存。
+- **`TryGetComponent(int, out T)` 单遍校验**：合并原先 `HasComponent` + `GetComponentFast` 的双重校验链，每次调用只读取一次实体记录、一次 Archetype 和一次 Chunk。
+- **Singleton 查找提速**：`TryGetSingleton` / `GetSingleton` 使用静态缓存的类型 ID 并内联实体存活校验，去掉每次调用的注册表字典查找与重复释放检查。
+- 公共 API 签名与行为保持不变；以上均为内部实现优化。
+
 ## [1.10.0] — 模板批量实例化
 
 ### Added

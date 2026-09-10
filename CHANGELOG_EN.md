@@ -2,6 +2,15 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.10.1] — Random-Access Hot-Path Optimization
+
+### Performance
+- **Direct-indexed BufferStore lookup**: Standalone buffer APIs (`GetBuffer`, `AddBufferElement`, `RemoveBufferElementAtSwapBack`, `SetBufferElement`, `GetBufferLength`, etc.) no longer hit a `Dictionary<Type, …>` on every call. Each element type receives a process-wide incremental ID and each World caches its `BufferStore<T>` in a direct-indexed array.
+- **One less dictionary hop for entity buffer elements**: `AddBufferElement(Entity, T)`, `GetBufferElement`, `RemoveBufferElementAt`, `GetBufferElementCount`, and `ClearBufferElements` now store a single `List<T>` wrapper per (entity, type) leaf instead of a dictionary re-keyed by entity, removing one redundant hash lookup per call and orphaned entries after entity destruction; component type IDs now come from a static generic cache.
+- **Single-pass `TryGetComponent(int, out T)`**: The former `HasComponent` + `GetComponentFast` double validation chain is merged so each call reads the entity record, archetype, and chunk exactly once.
+- **Faster singleton lookup**: `TryGetSingleton` / `GetSingleton` use a statically cached type ID and an inlined liveness check, eliminating a registry dictionary lookup and a redundant disposal check per call.
+- Public API signatures and behavior are unchanged; all of the above are internal implementation optimizations.
+
 ## [1.10.0] — Batch Template Instantiation
 
 ### Added
