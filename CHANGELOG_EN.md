@@ -2,6 +2,14 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.11.0] — Buffer Bulk Length Setting
+
+### Added
+- **`World.ResizeBuffer<T>(handle, length)`**: Sets the logical length of a World-managed buffer in one call, growing capacity to the next power of two as needed with the grown region zero-filled; shrinking preserves the prefix. Replaces the "loop `AddBufferElement` to grow length" pattern — filling a million-element buffer drops from O(n) calls to one call plus one span write. Resizing may relocate range addresses and must be called before scheduling any Job (same rule as `EnsureCapacity`).
+
+### Perf
+- **`SpatialTreeView` / `CollisionWorldView` growth paths**: Both "loop Add default values to reach length" loops replaced by a single `ResizeBuffer`, eliminating per-element `GetRange` + `EnsureRangeCapacity` + write-back overhead.
+
 ## [1.10.1] — Random-Access Hot-Path Optimization
 
 ### Performance

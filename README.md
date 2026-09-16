@@ -658,6 +658,10 @@ world.RemoveBufferElementAtSwapBack(damageLog, 0);
 // 清空
 world.ClearBuffer<DamageRecord>(damageLog);
 
+// 一次设置长度（按需扩容，增长区已清零）
+// 注意：扩容会搬移地址，必须在调度任何 Job 之前调用
+world.ResizeBuffer<DamageRecord>(damageLog, 1024);
+
 // 获取长度
 int len = world.GetBufferLength<DamageRecord>(damageLog);
 ```
