@@ -10,7 +10,7 @@
     "name": "Norman"
   },
   "repository": {
-    "url": "https://github.com/NormanYUE/Ember-Framework-Private.git"
+    "url": "https://github.com/NormanYUE/Ember-Framework.git"
   },
   "dependencies": {
     "com.unity.collections": "2.4.3",
