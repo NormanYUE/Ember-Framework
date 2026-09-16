@@ -2,6 +2,14 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.11.0] — Buffer 批量长度设置
+
+### Added
+- **`World.ResizeBuffer<T>(handle, length)`**：把 World 托管 buffer 的逻辑长度一次性设为指定值，按需按 2 的幂扩容，增长区已清零；缩短保留前缀数据。替代「逐元素 `AddBufferElement` 循环撑长度」，百万级元素的大 buffer 填充从 O(n) 次调用降为一次调用 + 一次 span 写入。扩容会搬移 range 地址，必须在调度任何 Job 之前调用（与 `EnsureCapacity` 同一规则）。
+
+### Perf
+- **`SpatialTreeView` / `CollisionWorldView` 扩容路径**：两处「循环 Add 默认值撑长度」改为单次 `ResizeBuffer`，消除逐元素的 `GetRange` + `EnsureRangeCapacity` + 回写开销。
+
 ## [1.10.1] — 随机访问热路径优化
 
 ### Performance

@@ -658,6 +658,10 @@ world.RemoveBufferElementAtSwapBack(damageLog, 0);
 // Clear
 world.ClearBuffer<DamageRecord>(damageLog);
 
+// Set length in one call (grows capacity as needed, grown region zero-filled)
+// Note: resizing may relocate addresses — must be called before scheduling any Job
+world.ResizeBuffer<DamageRecord>(damageLog, 1024);
+
 // Get length
 int len = world.GetBufferLength<DamageRecord>(damageLog);
 ```
