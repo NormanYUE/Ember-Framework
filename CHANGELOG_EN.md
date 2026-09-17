@@ -2,6 +2,60 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.12.0] — Component registration timing fix (systems constructed before the World)
+
+### Fixed
+
+- **Registering systems in the documented assembly order no longer throws
+  `unregistered component type '<X>'`.**
+
+  Systems are **constructed immediately** by `SystemTicker.Register` (`Register<T>()` runs `new T()`,
+  `Register(Type)` runs `Activator.CreateInstance`, and `SystemGroup` expansion recurses the same way),
+  but component types were only registered inside the `World` constructor — and `World` is not created
+  until `ECSManager.Start()`. Any system that builds an `EntityQuery` in a field initializer
+  (`EntityQuery.With<T>()` / `ComponentMask.With<T>()` read `ComponentTypeRegistry` on the spot)
+  therefore threw on the **first run in a fresh AppDomain**.
+
+  The symptom is easy to misread as an environment problem: the registry is `static` with AppDomain
+  lifetime, so once any `World` has existed in that domain (editor tooling, a previous Play session) —
+  or the editor has Domain Reload disabled — the registry is already populated and `Seal()`ed and the
+  failure stops reproducing.
+
+  `Ember.Core`'s `SpatialSystemGroup` and every system group in `Ember.Collision` and
+  `Ember.Navigation` use that pattern: it is first-party convention, not consumer misuse.
+  `EntityQueryCache<T>.All` (a generic static field initializer) is a second entrance to the same defect.
+
+### Added
+
+- **`World.EnsureComponentTypesRegistered()` (public static)**: idempotent entry point that guarantees
+  every `IComponent` type is registered and `Seal()`ed. The `World` constructor and
+  `SystemTicker.Register<T>()` / `Register(Type)` / `ApplyProfile` all call it before constructing
+  systems; hosts that build systems without a `SystemTicker` (editor tooling, pure-logic tests with no
+  World) can call it themselves.
+
+### Changed
+
+- **Registration and `Seal()` now happen earlier** — at whichever comes first: the first `Register` /
+  `ApplyProfile` / `EntityQueryCache<T>` static access, or `World` construction.
+  Component `TypeId` assignment order is unchanged: it is still fixed by the first full assembly scan
+  that triggers registration (provided the assembly set at that moment is the same).
+  **Constraint**: assemblies loaded *after* `Seal()` will not have their component types registered.
+  A host that loads patch assemblies after `Register` must either order loading before system
+  registration or arrange the assembly order itself.
+- **Diagnostics**: the unregistered-type and post-seal-registration exceptions in
+  `ComponentTypeRegistry` now point at the registration entry point, and the previously misleading
+  claim "...the assembly containing the type is loaded before the World is created" has been corrected.
+- **README lifecycle diagram** (§13.3, both languages) now states that `Register` already constructs
+  systems and triggers component registration. The old diagram said only "added to pending registration
+  list", contradicting the implementation — precisely why the defect was hard for consumers to predict.
+
+### Notes
+
+- Companion fixes ship in `Ember.Core` 2.1.1, `Ember.Collision` 0.3.2 and `Ember.Navigation` 0.2.2:
+  12 systems across the four packages moved their `EntityQuery` construction from field initializers
+  into `OnCreate()`. Even with this framework fix in place, no path that constructs systems before the
+  World should depend on a global side effect, so both sides change.
+
 ## [1.11.0] — Buffer Bulk Length Setting
 
 ### Added

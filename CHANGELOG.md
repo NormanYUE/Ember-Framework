@@ -2,6 +2,55 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.12.0] — 组件注册时机修正（系统构造早于 World 创建）
+
+### Fixed
+
+- **按官方装配顺序注册系统不再抛 `unregistered component type '<X>'`。**
+
+  系统由 `SystemTicker.Register` **立即构造**（`Register<T>()` 走 `new T()`，`Register(Type)` 走
+  `Activator.CreateInstance`，`SystemGroup` 递归展开同理），而组件类型注册原本只发生在 `World`
+  构造函数里 —— `World` 却要等到 `ECSManager.Start()` 才被创建。于是任何在字段初始化器里构造
+  `EntityQuery` 的系统（`EntityQuery.With<T>()` / `ComponentMask.With<T>()` 会当场读
+  `ComponentTypeRegistry`）在**全新 AppDomain 的第一次运行**中必然抛异常。
+
+  症状容易被误判为环境问题：注册表是 `static`、生命周期为 AppDomain，只要该 domain 里曾经
+  创建过任意 `World`（编辑器工具、上一次 Play 会话），或编辑器关闭了 Domain Reload，
+  注册表就已被填满并 `Seal()`，之后不再复现。
+
+  `Ember.Core` 的 `SpatialSystemGroup`、`Ember.Collision` 与 `Ember.Navigation` 的全部系统组
+  都使用该写法，属第一方实现惯例而非使用方误用；配套的 `EntityQueryCache<T>.All`
+  （泛型静态字段初始化器）是同一缺陷的第二个入口。
+
+### Added
+
+- **`World.EnsureComponentTypesRegistered()`（public static）**：幂等入口，确保所有
+  `IComponent` 类型已注册并 `Seal()`。`World` 构造、`SystemTicker.Register<T>()` /
+  `Register(Type)` / `ApplyProfile` 都会在构造系统之前调用它；不经由 `SystemTicker` 构造系统的
+  宿主（编辑器工具、不建 World 的纯逻辑单测）可自行调用。
+
+### Changed
+
+- **注册与 `Seal()` 的实际时机前移**到「首次 `Register` / `ApplyProfile` / `EntityQueryCache<T>`
+  静态访问 / `World` 构造」，四者取最早。
+  组件 `TypeId` 的分配顺序不变 —— 仍由首次触发的那一次全程序集扫描固定（前提是该时刻的程序集
+  集合与原先一致）。
+  **约束**：`Seal()` 之后加载的程序集，其组件类型不会再被注册；若宿主在
+  `Register` 之后才 `Assembly.Load` 补丁程序集，需在此之前自行调用
+  `World.EnsureComponentTypesRegistered()` 之外的加载顺序保证，或把装配顺序调整为「先加载程序集，
+  再注册系统」。
+- **诊断文本**：`ComponentTypeRegistry` 的未注册异常与 `Seal` 后注册异常补上注册入口的指路，
+  并修正了原先「the assembly ... is loaded before the World is created」这一误导性表述。
+- **README 生命周期图**（中/英 §13.3）补上「`Register` 时刻已构造系统、已触发组件注册」，
+  原先图中 `Register` 只写「加入待注册列表」，与实现不符 —— 这正是该缺陷难以被使用者预判的原因。
+
+### Notes
+
+- 配套修复见 `Ember.Core` 2.1.1、`Ember.Collision` 0.3.2、`Ember.Navigation` 0.2.2：
+  四个包内 12 个系统把 `EntityQuery` 从字段初始化器移入 `OnCreate()`。
+  即使本框架修复到位，任何「在 World 之前构造系统」的路径也不该依赖全局副作用，
+  故两侧都要改。
+
 ## [1.11.0] — Buffer 批量长度设置
 
 ### Added
