@@ -2,6 +2,35 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.13.0] — 新增 CreateSizedBuffer：创建即定长的 buffer
+
+### Added
+
+- **`World.CreateSizedBuffer<T>(int length)`**：创建**长度即等于 `length`** 的 buffer，
+  可直接按 `[0, length)` 下标读写。
+
+  与 `CreateBuffer<T>(initialCapacity)` 的区别只有逻辑长度：后者建出来长度是 **0**，
+  只是容量给了 `initialCapacity`，必须再调 `ResizeBuffer` 才能按下标用。两者混用时，
+  「忘了设长度」的 buffer 读出来是空 span，**不会有任何提示** —— 这个坑已经咬了两次：
+  `Ember.Collision` 的 `DiagnosticFlags` 与 `Ember.Navigation` 的 `FlowSlots` 等 5 个 buffer
+  都是「建了容量、从未设长度」，直到真机才以空指针 / 容器未构造的形式炸出来。
+
+  `CreateBuffer` 语义不变（空容器 + `AddBufferElement` 追加仍是合法用法，框架自身的
+  `World.DeferredDestroy` 就是这么用的）。`CreateSizedBuffer` 只是把「要一个定长数组」
+  这件事变成一个不会忘的调用。
+
+  实现上它等价于 `CreateBuffer(length)` 后紧跟一次 `ResizeBuffer(handle, length)`；
+  `length` 为 0 合法（得到空 buffer），为负抛 `ArgumentOutOfRangeException`。
+
+- **README §6.1** 补上两者的区别说明。
+
+### Notes
+
+- 配套修复见 `Ember.Collision` 1.0.2 与 `Ember.Navigation` 0.2.5：两包的 buffer 创建点
+  全部改用 `CreateSizedBuffer`，并补上 Collision 漏掉的那一处 `Grow`。
+- 新增 `tests/Unit/Buffer/BufferSizedCreateTests.cs`（5 项）。这些用例依赖 Unity 原生容器，
+  在 CLI 下按既有约定 Ignore，需在 Unity Test Runner 中执行。
+
 ## [1.12.0] — 组件注册时机修正（系统构造早于 World 创建）
 
 ### Fixed

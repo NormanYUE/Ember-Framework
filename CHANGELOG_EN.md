@@ -2,6 +2,37 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.13.0] — New CreateSizedBuffer: create a buffer that already has a length
+
+### Added
+
+- **`World.CreateSizedBuffer<T>(int length)`**: creates a buffer whose **length is `length`**,
+  ready to be indexed over `[0, length)`.
+
+  The only difference from `CreateBuffer<T>(initialCapacity)` is the logical length: the latter
+  creates a buffer of length **0** with that much capacity, and you must call `ResizeBuffer` before
+  indexing it. Mixing the two is silent — a buffer whose length was never set simply reads as an
+  empty span. That trap has now bitten twice: `Ember.Collision`'s `DiagnosticFlags` and
+  `Ember.Navigation`'s `FlowSlots` (plus three more) were all created with a capacity and never
+  given a length, surfacing only on device as null pointers or "container not constructed".
+
+  `CreateBuffer` keeps its semantics (an empty container plus `AddBufferElement` is still a
+  legitimate pattern — the framework's own `World.DeferredDestroy` uses it). `CreateSizedBuffer`
+  just turns "I want a sized array" into a call that cannot be forgotten.
+
+  It is equivalent to `CreateBuffer(length)` followed by `ResizeBuffer(handle, length)`; a `length`
+  of 0 is valid (an empty buffer), a negative one throws `ArgumentOutOfRangeException`.
+
+- **README §6.1** now spells out the difference.
+
+### Notes
+
+- Companion fixes ship in `Ember.Collision` 1.0.2 and `Ember.Navigation` 0.2.5: every buffer
+  creation site in both packages moved to `CreateSizedBuffer`, and Collision's one missing `Grow`
+  was added.
+- New `tests/Unit/Buffer/BufferSizedCreateTests.cs` (5 cases). They need Unity native containers
+  and are `Ignore`d under the CLI by the existing convention; run them in the Unity Test Runner.
+
 ## [1.12.0] — Component registration timing fix (systems constructed before the World)
 
 ### Fixed
