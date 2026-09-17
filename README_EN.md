@@ -1067,11 +1067,14 @@ ECSManager.CreateTicker()
   → Creates a SystemTicker instance, returns an integer index
 
 ticker.Register<T>()
+  → Triggers component type registration (full assembly scan of ComponentTypeRegistry + Seal)
   → SystemGroup subclasses expand via Configure(this)
-  → SystemBase subclasses added to pending registration list
+  → SystemBase subclasses are **constructed immediately** (field initializers run here)
+    and added to the pending registration list
 
 ECSManager.Start()
-  → Creates a World instance
+  → Creates a World instance (component types are already registered and sealed,
+    so no second scan happens)
   → Calls each Ticker.Init() → OnCreate()
 
 ECSManager.Tick(index, dt)

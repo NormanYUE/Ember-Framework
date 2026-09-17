@@ -1067,11 +1067,12 @@ ECSManager.CreateTicker()
   → 创建 SystemTicker 实例，返回整数索引
 
 ticker.Register<T>()
+  → 触发组件类型注册（全程序集扫描 ComponentTypeRegistry + Seal）
   → SystemGroup 子类展开其 Configure(this)
-  → SystemBase 子类加入待注册列表
+  → SystemBase 子类**立即构造**（字段初始化器在此求值）并加入待注册列表
 
 ECSManager.Start()
-  → 创建 World 实例
+  → 创建 World 实例（组件类型此时已注册并 Seal，不再重复扫描）
   → 调用每个 Ticker.Init() → OnCreate()
 
 ECSManager.Tick(index, dt)
