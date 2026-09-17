@@ -628,8 +628,11 @@ A dynamically-sized array managed through `BufferHandle` references from a globa
 ```csharp
 World world = m_Manager.World;
 
-// Create a buffer
+// Create a buffer — note: its **logical length is 0**, only the capacity is 16
 BufferHandle damageLog = world.CreateBuffer<DamageRecord>(initialCapacity: 16);
+
+// If you want N elements ready to index, use this instead
+BufferHandle health = world.CreateSizedBuffer<float>(entityCount);
 
 // Destroy a buffer
 world.DestroyBuffer<DamageRecord>(damageLog);

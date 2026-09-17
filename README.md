@@ -628,8 +628,11 @@ foreach (var row in EcsAPI.Query(world)
 ```csharp
 World world = m_Manager.World;
 
-// 创建缓冲区
+// 创建缓冲区 —— 注意：**逻辑长度是 0**，只是容量给了 16
 BufferHandle damageLog = world.CreateBuffer<DamageRecord>(initialCapacity: 16);
+
+// 想要「建出来就有 N 个元素、可以直接按下标用」，用这个
+BufferHandle health = world.CreateSizedBuffer<float>(entityCount);
 
 // 销毁缓冲区
 world.DestroyBuffer<DamageRecord>(damageLog);
