@@ -2,6 +2,58 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.13.1] — ECB 回放暂存池化：消除每帧一个白扔的字典
+
+### Performance
+
+- **`EntityCommandBuffer.PlaybackBatch` 的 4 个临时集合改为实例字段复用。**
+
+  `PlaybackBatch` 每次调用都会 `new` 出
+  `Dictionary<Entity,int>`、`Dictionary<ComponentTypeId,List<ECBCommand>>`、
+  `Dictionary<ComponentTypeId,List<Entity>>`、`List<Entity>`，
+  外加**每个组件类型组**一个内层 `List`、以及每个可批量组一个 `List<Entity>`。
+  而 ECB 实例本身是**每系统常驻、`EndTick` 里 `Clear()` 复用**的
+  （见 `SystemContext.ECB` / `EndTick`），所以这些集合完全可以提到字段上复用。
+
+  现在：外层 4 个集合为字段（入口 `Clear()`），内层列表走「列表池 + 已用游标」
+  （池只涨不缩，`Clear()` 保留容量），`Clear()` 里一并归零游标。
+  预热后回放路径**零托管分配**。
+
+- **尤其值得修的是「查重后立刻 bail」那条路径。**
+
+  它先建 `Dictionary<Entity,int>` 做同实体查重，一旦发现同一实体出现多次
+  就 `return` 回落到 `PlaybackSequential`——**刚建的字典当场变成垃圾**。
+
+  这不是罕见路径：任何「同一实体连续加多个组件」的用法都必然命中。
+  `Ember.Collision` 的 `CollisionSetupSystem` 就是典型——它 4 趟循环，
+  每趟给同一批实体各加 1 个组件，于是每个新碰撞体产生 4 条同实体命令。
+  实测（Unity Profiler，某一帧）：
+
+  ```text
+  EntityCommandBuffer.PlaybackBatch()       1 call   4.1 KB
+  ├ Dictionary`2.set_Item()                40 calls  4.0 KB
+  ├ NativeList`1.get_Item()                41 calls
+  └ GC.Alloc                                1 call    80 B
+  ```
+
+  41 次迭代 / 40 次 `set_Item` 正好对上「该帧 40 个新碰撞体 → 第一趟 40 条互异命令、
+  第 41 条撞到第 2 趟的第一个实体」；那 4.0 KB 就是这个字典扩容链
+  （3→7→17→37→53）产生的全部垃圾。修复后这条路径不再分配。
+
+### Notes
+
+- **本改动不改变任何回放语义**：路径选择（batch / bail / sequential）、命令顺序、
+  结果都与之前一致，只把「每次新建」换成「复用 + `Clear()`」。
+- 内层列表用「列表的列表 + 已用计数」而非单个共享 scratch，是为了保持原有
+  「每个组件类型组一个独立列表」的语义，避免让下游持有同一个列表实例。
+- 触发条件：命令数 ≥ `k_BurstBatchThreshold`(64) 且全部为 Add/Remove/Destroy，
+  且该帧新增碰撞体 ≥ 16 个。低于此门槛时 `ShouldUseBatchPlayback()` 直接返回 false，
+  本来就不会分配。
+- **回归防线是外部 Profiler 读数，不是单测**：`EntityCommandBuffer` 的构造就要
+  `new NativeList(...)`，纯 CLI 下 `Unity.Collections` 原生容器无法分配
+  （框架既有约定：这类测试一律 `Assert.Ignore("Requires Unity runtime support...")`）。
+  因此这条修复无法在 CLI 测试里自证，只能由 Unity 侧 profiler 确认。
+
 ## [1.13.0] — 新增 CreateSizedBuffer：创建即定长的 buffer
 
 ### Added
