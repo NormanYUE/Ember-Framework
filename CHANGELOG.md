@@ -2,6 +2,40 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.13.2] — 修复 chunk 泄漏：DestroyEntity 漏回拨 firstNonFullIndex
+
+### Fixed
+
+- **持续 churn 下 chunk 只增不减（原生 + 托管内存泄漏）。**
+
+  现象：实体不断创建/销毁、总数稳定时，`World.TotalChunks` 线性增长且不收敛。
+  Unity 内合成负载实测（人口稳定 300、每轮 +5/-5，共 2000 轮）：
+  `TotalChunks` **4 → 82**，取样点 23 / 43 / 62 / 82，**没有任何回落**。
+
+  每个泄漏的 chunk 占：托管 `Entity[capacity]`（capacity=128 时 1 KB）
+  + `Chunk` 对象 + 原生 `layout.TotalBytes`（单组件原型 1536 B）
+  + 原生 `NativeArray<int>(capacity)`（512 B）。持续泄漏最终会让
+  `World.ReserveChunk` 抛 `InvalidOperationException`（默认 `MaxTotalChunks = 20000`），
+  整个 World 不可再用。
+
+  根因是两条路径不对称：**迁移路径**在 `RemoveAtSwapBack` 之后会回拨
+  `Archetype.m_FirstNonFullIndex`（`NotifyChunkNotFull`），**销毁路径漏了这一步**。
+  而 `FindOrCreateChunkSlot` 只从该指针**向后**扫，`RemoveEmptyChunks` 只裁剪
+  「尾部连续为空」的 chunk —— 于是「位置在前、已经空掉」的 chunk 既扫不到
+  （不会被复用）、也收不回（不会入池/释放），只剩 `AppendChunk()` 一条路。
+
+  修复两处：
+
+  1. `World.DestroyEntityInternal` 补上 `NotifyChunkNotFull(record.ChunkIndex)`，
+     与迁移路径对称。`DestroyEntity` / `DestroyEntityBatch` / 级联销毁 / 延迟销毁
+     全部经过这个内部方法，一处即覆盖。
+  2. `Archetype.FindOrCreateChunkSlot` 在真正 `AppendChunk()` 之前**回扫**
+     `[0, m_FirstNonFullIndex)` 兜底，保证今后任何忘记回拨的新路径也不会再搁置空
+     chunk。该回扫只在「原本就要新建 chunk」的路径上执行，不影响常规路径开销。
+
+  判据（可用于回归）：同样负载下 `TotalChunks` 应稳定不增；
+  销毁掉某个 chunk 的全部实体后，该 chunk 应立刻被复用而不是新建。
+
 ## [1.13.1] — ECB 回放暂存池化：消除每帧一个白扔的字典
 
 ### Performance

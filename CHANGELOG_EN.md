@@ -2,6 +2,45 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.13.2] — Fix chunk leak: DestroyEntity never rolled back firstNonFullIndex
+
+### Fixed
+
+- **Under sustained churn, chunks only ever grew (native + managed memory leak).**
+
+  Symptom: while entities are continuously created and destroyed with a stable
+  population, `World.TotalChunks` grows linearly and never converges. Measured with a
+  synthetic load in Unity (population held at 300, +5/-5 per iteration, 2000 iterations):
+  `TotalChunks` **4 -> 82**, sampled at 23 / 43 / 62 / 82 with **no decrease anywhere**.
+
+  Each leaked chunk holds a managed `Entity[capacity]` (1 KB at capacity 128) plus a
+  `Chunk` object, a native `layout.TotalBytes` buffer (1536 B for a single-component
+  archetype) and a native `NativeArray<int>(capacity)` (512 B). Left alone, the leak
+  eventually makes `World.ReserveChunk` throw `InvalidOperationException`
+  (`MaxTotalChunks` defaults to 20000) and the World becomes unusable.
+
+  The root cause is an asymmetry between two paths: the **migration path** rolls back
+  `Archetype.m_FirstNonFullIndex` via `NotifyChunkNotFull` after `RemoveAtSwapBack`,
+  while the **destroy path was missing that step**. Since `FindOrCreateChunkSlot` only
+  scans *forward* from that pointer and `RemoveEmptyChunks` only trims chunks at the
+  *tail* that are empty, a chunk that sits *earlier* in the list and has become empty is
+  neither found (so never reused) nor reclaimed (so never pooled or freed) - leaving
+  `AppendChunk()` as the only option.
+
+  Two fixes:
+
+  1. `World.DestroyEntityInternal` now calls `NotifyChunkNotFull(record.ChunkIndex)`,
+     matching the migration path. `DestroyEntity`, `DestroyEntityBatch`, cascade destroys
+     and deferred destroys all funnel through this internal method, so one call covers all.
+  2. `Archetype.FindOrCreateChunkSlot` now **back-scans** `[0, m_FirstNonFullIndex)` as a
+     fallback before actually calling `AppendChunk()`, so no future path that forgets the
+     rollback can strand an empty chunk again. The back-scan only runs on the path that was
+     about to allocate a new chunk anyway, so the normal path is unaffected.
+
+  Acceptance criterion (usable as a regression check): under the same load `TotalChunks`
+  must stay flat; after destroying every entity of a chunk, that chunk must be reused
+  immediately instead of a new one being appended.
+
 ## [1.13.1] — Pool ECB playback scratch: one discarded dictionary per frame is gone
 
 ### Performance
