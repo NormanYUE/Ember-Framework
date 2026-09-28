@@ -2,6 +2,99 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.13.2] — Fix chunk leak: DestroyEntity never rolled back firstNonFullIndex
+
+### Fixed
+
+- **Under sustained churn, chunks only ever grew (native + managed memory leak).**
+
+  Symptom: while entities are continuously created and destroyed with a stable
+  population, `World.TotalChunks` grows linearly and never converges. Measured with a
+  synthetic load in Unity (population held at 300, +5/-5 per iteration, 2000 iterations):
+  `TotalChunks` **4 -> 82**, sampled at 23 / 43 / 62 / 82 with **no decrease anywhere**.
+
+  Each leaked chunk holds a managed `Entity[capacity]` (1 KB at capacity 128) plus a
+  `Chunk` object, a native `layout.TotalBytes` buffer (1536 B for a single-component
+  archetype) and a native `NativeArray<int>(capacity)` (512 B). Left alone, the leak
+  eventually makes `World.ReserveChunk` throw `InvalidOperationException`
+  (`MaxTotalChunks` defaults to 20000) and the World becomes unusable.
+
+  The root cause is an asymmetry between two paths: the **migration path** rolls back
+  `Archetype.m_FirstNonFullIndex` via `NotifyChunkNotFull` after `RemoveAtSwapBack`,
+  while the **destroy path was missing that step**. Since `FindOrCreateChunkSlot` only
+  scans *forward* from that pointer and `RemoveEmptyChunks` only trims chunks at the
+  *tail* that are empty, a chunk that sits *earlier* in the list and has become empty is
+  neither found (so never reused) nor reclaimed (so never pooled or freed) - leaving
+  `AppendChunk()` as the only option.
+
+  Two fixes:
+
+  1. `World.DestroyEntityInternal` now calls `NotifyChunkNotFull(record.ChunkIndex)`,
+     matching the migration path. `DestroyEntity`, `DestroyEntityBatch`, cascade destroys
+     and deferred destroys all funnel through this internal method, so one call covers all.
+  2. `Archetype.FindOrCreateChunkSlot` now **back-scans** `[0, m_FirstNonFullIndex)` as a
+     fallback before actually calling `AppendChunk()`, so no future path that forgets the
+     rollback can strand an empty chunk again. The back-scan only runs on the path that was
+     about to allocate a new chunk anyway, so the normal path is unaffected.
+
+  Acceptance criterion (usable as a regression check): under the same load `TotalChunks`
+  must stay flat; after destroying every entity of a chunk, that chunk must be reused
+  immediately instead of a new one being appended.
+
+## [1.13.1] — Pool ECB playback scratch: one discarded dictionary per frame is gone
+
+### Performance
+
+- **The 4 temporary collections in `EntityCommandBuffer.PlaybackBatch` are now reused instance
+  fields.**
+
+  Every call used to `new` a `Dictionary<Entity,int>`,
+  `Dictionary<ComponentTypeId,List<ECBCommand>>`, `Dictionary<ComponentTypeId,List<Entity>>` and
+  a `List<Entity>`, plus **one inner `List` per component-type group** and one `List<Entity>` per
+  batchable group. The ECB instance itself is **per-system and reused** (created lazily in
+  `SystemContext.ECB`, `Clear()`ed in `EndTick`), so all of that can live on the instance.
+
+  Now: the 4 outer collections are fields (cleared on entry), the inner lists come from a
+  "list pool + used cursor" (the pool only grows, `Clear()` keeps capacity), and `Clear()` resets
+  the cursors. After warmup the playback path allocates **zero managed memory**.
+
+- **The path that matters most is the "detect conflict, then bail" one.**
+
+  It first builds a `Dictionary<Entity,int>` to detect repeated entities, and the moment it finds
+  one it `return`s to `PlaybackSequential` - **the dictionary it just built becomes garbage**.
+
+  This is not a rare path: any "add several components to the same entity" usage hits it.
+  `Ember.Collision`'s `CollisionSetupSystem` is the canonical case - it runs 4 passes, each adding
+  one component to the same batch of entities, so every new collider produces 4 same-entity
+  commands. Measured with the Unity Profiler on one frame:
+
+  ```text
+  EntityCommandBuffer.PlaybackBatch()       1 call   4.1 KB
+  ├ Dictionary`2.set_Item()                40 calls  4.0 KB
+  ├ NativeList`1.get_Item()                41 calls
+  └ GC.Alloc                                1 call    80 B
+  ```
+
+  41 iterations / 40 `set_Item` calls match exactly "40 new colliders that frame -> 40 distinct
+  commands in pass 1, and iteration 41 hits the first entity of pass 2"; the 4.0 KB is the whole
+  growth chain of that dictionary (3->7->17->37->53). This path no longer allocates.
+
+### Notes
+
+- **Playback semantics are unchanged**: path selection (batch / bail / sequential), command order
+  and results are identical - only "new every time" became "reuse + `Clear()`".
+- The inner lists use a "list of lists + used cursor" rather than a single shared scratch, to keep
+  the original semantics of "one distinct list per component-type group" and avoid handing the same
+  list instance to downstream code.
+- Trigger condition: at least `k_BurstBatchThreshold` (64) commands, all Add/Remove/Destroy, and at
+  least 16 new colliders in the frame. Below that threshold `ShouldUseBatchPlayback()` returns false
+  and there was never an allocation.
+- **The regression guard is an external Profiler reading, not a unit test**: constructing an
+  `EntityCommandBuffer` already requires `new NativeList(...)`, and `Unity.Collections` native
+  containers cannot be allocated under plain CLI (the framework's existing convention is to
+  `Assert.Ignore("Requires Unity runtime support...")` for that class of test). This fix therefore
+  cannot prove itself in CLI tests and must be confirmed with a Unity-side profiler.
+
 ## [1.13.0] — New CreateSizedBuffer: create a buffer that already has a length
 
 ### Added
