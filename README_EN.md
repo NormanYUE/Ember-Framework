@@ -59,6 +59,7 @@ https://github.com/NormanYUE/Ember-Framework.git
 12. [Performance and Diagnostics](#12-performance-and-diagnostics)
 13. [Architecture Overview](#13-architecture-overview)
 14. [MCP Server](#14-mcp-server)
+15. [Deterministic Random and Change Log](#15-deterministic-random-and-change-log)
 
 ---
 
@@ -285,6 +286,21 @@ world.Instantiate("Projectile", roots.AsSpan());
 ```
 
 The batch API validates entity limits, singleton ownership, and chunk budget once, then reserves rows for the final archetypes of the complete template tree. Created callbacks run only after each root has complete defaults and hierarchy. Creating or destroying entities, adding or removing components, and disposing the World are blocked during batch-created callbacks. If a listener throws, the current root remains committed and later roots are not created.
+
+### 3.6 Versioned Entity Handles
+
+`Entity` is `(Index, Version)` — two `int`s, 8 bytes total — so it fits directly into `NativeArray<Entity>` / `NativeHashSet<Entity>`. Destroying an entity increments the slot version and the index is later recycled, so **storing only the `int` index loses stale detection**.
+
+```csharp
+// Version-aware liveness: a recycled slot invalidates the old handle
+if (world.IsAlive(handle)) { /* still the same entity */ }
+
+// Or resolve to the current live handle in one call
+if (world.TryResolve(handle, out var live))
+    world.SetComponent(live, new Health { Value = 10 });
+```
+
+`world.IsAlive(int entityIndex)` keeps its original meaning (**slot occupied or not, version ignored**); use `IsAlive(Entity)` or `TryResolve` when you hold a handle. Passing a stale handle to `GetComponent` / `SetComponent` throws `InvalidOperationException` whose message carries `Entity(index, vN)` — it never silently resolves to the recycled entity.
 
 ---
 
@@ -872,6 +888,31 @@ for (int i = 0; i < entities.Length; i++)
 world.ClearDeferredDestroyEntities();
 ```
 
+### 10.4 Skipping Pending-Destroy Entities During Iteration
+
+Entities marked for deferred destruction but not yet destroyed still appear in query results for the rest of the frame. Skip them explicitly when you need "only entities that will still be there":
+
+```csharp
+foreach (var row in query.AsRows().WithoutPendingDestroy())
+    row.RW<Velocity>() = ...;
+```
+
+This is a **row-level** filter (one marker lookup per row) and is off by default. `EntityQuery`'s `All/Any/None` are archetype-level conditions while pending destroy is a per-entity marker, so it cannot be expressed as a query condition. The check routes through `world.ContainsDeferredDestroyEntity(entity)`, which is itself version-aware.
+
+### 10.5 Pre-Destroy Hook
+
+```csharp
+protected override void OnEntityDestroying(Entity entity)
+{
+    // Entity is still alive and components are readable: book keeps, move data, resolve drops
+    ref readonly var loot = ref ctx.Read<LootTable>(entity);
+}
+```
+
+Runs **before** teardown (`Alive=false`, `Version++`, row removed from the chunk), so component data is readable. Structural changes are rejected while the hook runs (they throw `InvalidOperationException`) — record them in the `ECB` and let playback apply them at the end of the system tick.
+
+`OnEntityDestroyed` remains the **post**-teardown notification: it only tells you the entity is gone and cannot read data. Do not mix the two. Systems overriding the new hook surface as `hooks.entityDestroying` in `system_status` / `get_system_info`.
+
 ---
 
 ## 11. SystemGroup
@@ -1020,6 +1061,42 @@ dotnet build tests/Performance/Ember.Performance.csproj -c Release
 ```
 
 Benchmarks cover component read/write, chunk column access, query cache, AddComponent/RemoveComponent, tag add/remove, batch structural changes, ComponentPack, and GC allocation. Benchmarks use real `World` / `Chunk` / `Unity.Collections.NativeArray` paths. Actual profiling requires a Unity-compatible runtime; plain .NET CLI can compile the project but cannot execute Unity native ECall-backed `NativeArray` allocations. Cached queries, chunk column reads/writes, and warmed ComponentPack build/write should maintain 0 GC.
+
+### 12.5 Single-Entity Diagnostics and Query Explanation
+
+```csharp
+var view = world.Describe(entity);
+// -> Alive / Version / Placed / ArchetypeIndex / ChunkIndex / Row / ComponentNames
+
+var why = QueryExplainer.Explain(world, EntityQuery.With<Position, Velocity>().Build(), entity);
+// why.Matched      : whether the query matches
+// why.MissingAll   : component names missing from All
+// why.BlockedByNone: component names that None excludes
+// why.Reason       : one-line reason, safe to log
+```
+
+`Describe` returns `Alive=false` plus the **current slot version** for a stale handle and never exposes the current occupant's component names. `QueryExplainer` distinguishes "index out of range (never existed)", "version mismatch (destroyed or recycled)", and "alive but not yet placed (created during iteration)". Both are diagnostic-path calls, not hot path.
+
+### 12.6 Dependency Edge Reasons and Runtime Access Validation
+
+Every edge from `SystemTicker.GetDependencyGraphDebugView()` now carries a reason:
+
+```csharp
+var graph = ticker.GetDependencyGraphDebugView();
+foreach (var layer in graph.Layers)
+    foreach (var edge in layer.Edges)
+        Debug.Log($"{edge.FromIndex}->{edge.ToIndex} {edge.Reason} {edge.ConflictType.Value}");
+// Reason: UndeclaredAccess / StructuralChanges / MaskConflict
+```
+
+Access validation (actual access vs `DeclareAccess`) is recorded while the debug window is open or `EmberEditorGuard.ForcePerfCollect` is true:
+
+```csharp
+var results = ticker.GetAllValidationResults();
+// MissingReads / MissingWrites / OverDeclaredReads / OverDeclaredWrites / MissingStructuralChanges
+```
+
+The matching Editor command is `validate_access`, which also accepts a `tickerIndex` filter.
 
 ---
 
@@ -1269,7 +1346,7 @@ Skills are project-level files intended to be committed and shared with the Unit
 | `--port <n>` | Manually specify a port. Usually unnecessary; use only when the status file is unavailable and the port is known |
 | `--status-dir <path>` | Override the Bridge status directory. Defaults to `~/.ember` |
 
-### 14.3 Command Reference (54 commands via `ember_execute`)
+### 14.3 Command Reference (55 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
@@ -1277,7 +1354,7 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 **Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (12):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph
+**Diagnostic (13):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph, validate_access
 **System (3):** system_status, get_system_info, advance_frame
 **Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
@@ -1326,3 +1403,41 @@ A typical interaction flow in an AI client:
 - **Unity Console**: Filter by `[Ember MCP]` prefix to view Bridge startup status, client connect/disconnect events, request method names, and truncated JSON content
 - **Ember MCP Window → Request Log**: Real-time display of the most recent 100 requests showing method name, response time (ms), and result preview
 - **`mcp_status` command**: Returns `running/state/reason/reloading/statusFile/statusSeq/clientCount`, useful for distinguishing Bridge stopped, Unity reloading, port busy, and no-client states
+
+---
+
+## 15. Deterministic Random and Change Log
+
+### 15.1 world.Rng
+
+```csharp
+world.SetRandomSeed(20260101);              // same seed -> same sequence
+var snapshot = world.Rng;                   // copying the struct is a snapshot
+
+var dice = world.Rng.NextInt(1, 7);         // [1, 7)
+var speed = world.Rng.NextFloat(0.8f, 1.2f);
+
+world.Rng = snapshot;                       // roll back to the sample point
+world.RestoreRandomState(state, sequence);  // or Pcg32.FromState for an exact restore
+```
+
+- PCG32, zero-allocation and Burst-friendly. `default(Pcg32)` normalises its sequence on first draw, so it never degenerates into an all-zero stream.
+- `NextInt(max)` uses rejection sampling to avoid modulo bias (bounded retries, no unbounded loop).
+- Stop calling `UnityEngine.Random` inside systems when you need to reproduce "why did it pick that one" — it cannot be snapshotted.
+
+### 15.2 Component Change Ring Buffer
+
+```csharp
+var log = world.TrackChanges<Health>(capacity: 4096);  // opt-in, per type
+world.ChangeLogTick = frame;                           // World has no frame concept; the caller stamps it
+world.SetComponent(e, new Health { Value = 5 });
+
+var change = log[log.Count - 1];
+// change.Entity / Kind / Tick / Sequence / OldValue / NewValue
+world.UntrackChanges<Health>();                        // stop tracking and drop the log
+```
+
+Covered: `SetComponent` / `AddComponent` / `RemoveComponent` (both the `Entity` and `int` overloads) and `SystemContext.Set`, which forwards into them.
+**Not covered**: `AddComponentBatch` / `RemoveComponentBatch`, ECB playback, `SetComponentRaw`, and in-place writes through `ref T`.
+
+The buffer is a fixed-size ring: writing past capacity overwrites the oldest entry, writes allocate nothing, and `TotalRecorded` counts every write including overwritten ones. Unregistered types are neither recorded nor allocated for.

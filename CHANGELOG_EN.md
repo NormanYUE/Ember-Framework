@@ -2,6 +2,68 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.14.0] — Versioned handles, pre-destroy hook, deterministic RNG and change log
+
+### Added
+
+- **`World.IsAlive(Entity)` / `World.TryResolve(Entity, out Entity)`**: liveness by `Index + Version`.
+  Destroying an entity increments the slot version and the index is later recycled, so storing only the
+  `int` index loses stale detection. `IsAlive(int)` keeps its original meaning (slot occupied, version
+  ignored) and is now documented as such.
+
+- **`EcsSystem.OnEntityDestroying(Entity)`**: a **pre**-destroy hook that runs before `Alive=false`,
+  `Version++` and the row leaving its chunk, so component data is fully readable. Structural changes are
+  rejected while it runs (they throw `InvalidOperationException`); record them in the `ECB` and let
+  playback apply them after the tick. `OnEntityDestroyed` remains the post-teardown notification.
+
+- **`World.Describe(Entity)`**: single-entity diagnostic snapshot (alive / version / placed /
+  archetype-chunk-row / component names). For a stale handle it returns `Alive=false` plus the current
+  slot version and never exposes the current occupant's component names.
+
+- **`QueryExplainer.Explain(world, query, entity)`**: answers "why does this entity not match this
+  query", distinguishing `MissingAll` / `BlockedByNone` / unsatisfied `Any`, and separating index out of
+  range, version mismatch, and alive-but-not-yet-placed.
+
+- **`QueryEnumerable.WithoutPendingDestroy()`**: skips entities already marked for deferred destruction
+  but not yet destroyed. Row-level filter, off by default; pending destroy is a per-entity marker and
+  cannot be expressed as an archetype-level `EntityQuery` condition.
+
+- **`DependencyEdgeDebugView.Reason` / `.ConflictType`** plus the **`DependencyReason`** enum: dependency
+  edges now carry why they exist (`UndeclaredAccess` / `StructuralChanges` / `MaskConflict`), naming the
+  contested component for mask conflicts. The decision logic moved to `DependencyReasonResolver` so it is
+  unit-testable without a World.
+
+- **`World.Rng` (`ref Pcg32`) / `Pcg32` / `SetRandomSeed` / `RestoreRandomState` / `Pcg32.FromState`**:
+  a world-level deterministic source. PCG32, zero-allocation, Burst-friendly; copying the struct is a
+  snapshot and assigning it back is a rollback. `default(Pcg32)` normalises its sequence on first draw
+  (never degrades to an all-zero stream); `NextInt` uses rejection sampling to avoid modulo bias.
+
+- **`World.TrackChanges<T>` / `UntrackChanges<T>` / `IsTrackingChanges<T>` / `GetChangeLog<T>` / `ChangeLogTick`**
+  with `ComponentChangeLog<T>` / `ComponentChange<T>` / `ComponentChangeKind`: a per-type opt-in
+  fixed-size ring of component changes (entity / kind / tick / sequence / old / new) with zero-allocation writes.
+
+### Changed
+
+- `SystemInfoDebugView` gained `HasEntityDestroyingHook`; the `hooks` block of `system_status` and
+  `get_system_info` now reports `entityDestroying`.
+- MCP `get_dependency_graph` now emits per-system `readComponents` / `writeComponents` and per-edge
+  `reason` / `conflictType`; existing fields are unchanged.
+- New MCP command **`validate_access`** (Diagnostic, 55 commands total) exporting each ticker's per-system
+  missing/over-declared accesses. `enableTracking` is a persistent switch (kept across calls; pass false to clear).
+
+### Notes
+
+- **Change-log coverage**: only `SetComponent` / `AddComponent` / `RemoveComponent` (both the `Entity` and
+  `int` overloads) and `SystemContext.Set` are recorded. Batch APIs, ECB playback, `SetComponentRaw`, and
+  in-place writes through `ref T` are **not** recorded.
+- `World` has no frame concept: the caller stamps `world.ChangeLogTick`. `Sequence` is a world-wide
+  monotonic counter.
+- New `tests/Unit` coverage: handle liveness/resolve, destroy-hook ordering, query explanation and
+  pending-destroy filtering, RNG sequence and snapshots, the change ring buffer, and dependency edge
+  reasons. Tests that need Unity native containers are `Ignore`d under the CLI per existing convention and
+  must run in the Unity Test Runner.
+- `DependencyGraph.BuildLayers` is algorithmically unchanged; this release only makes the edges explainable.
+
 ## [1.13.2] — Fix chunk leak: DestroyEntity never rolled back firstNonFullIndex
 
 ### Fixed

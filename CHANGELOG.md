@@ -2,6 +2,55 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.14.0] — 版本感知句柄、销毁前置钩子、确定性随机与变更记录
+
+### Added
+
+- **`World.IsAlive(Entity)` / `World.TryResolve(Entity, out Entity)`**：按 `Index + Version` 判活。
+  实体销毁后槽位版本自增、索引随后被回收复用，只存 `int` 索引会失去 stale 检测。
+  `IsAlive(int)` 语义不变（只看槽位占用、忽略版本），已在文档里标明。
+
+- **`EcsSystem.OnEntityDestroying(Entity)`**：销毁**前置**钩子，在 `Alive=false`、`Version++`、
+  行出 chunk **之前**调用，组件数据完整可读。通知期间禁止结构变更（抛 `InvalidOperationException`），
+  需要增删改请写 `ECB` 在 tick 结束回放。`OnEntityDestroyed` 仍是 teardown 之后的通知。
+
+- **`World.Describe(Entity)`**：单实体诊断快照（存活 / 版本 / 是否落位 / archetype-chunk-row / 组件名）。
+  stale 句柄返回 `Alive=false` + 当前槽位版本，且不会暴露当前占用者的组件名。
+
+- **`QueryExplainer.Explain(world, query, entity)`**：回答「这个实体为什么没被这条查询命中」，
+  区分 `MissingAll` / `BlockedByNone` / `Any` 未满足，并区分索引越界、版本不匹配、存活但未落位。
+
+- **`QueryEnumerable.WithoutPendingDestroy()`**：迭代时跳过已标记 deferred destroy 但本帧尚未销毁的实体。
+  行级过滤，默认关闭；pending destroy 是逐实体标记，无法表达为 archetype 级的 `EntityQuery` 条件。
+
+- **`DependencyEdgeDebugView.Reason` / `.ConflictType`** + **`DependencyReason`** 枚举：
+  依赖边现在带产生原因（`UndeclaredAccess` / `StructuralChanges` / `MaskConflict`），
+  mask 冲突时给出具体组件类型。判定逻辑抽到 `DependencyReasonResolver`，可单测覆盖。
+
+- **`World.Rng`（`ref Pcg32`）/ `Pcg32` / `SetRandomSeed` / `RestoreRandomState` / `Pcg32.FromState`**：
+  世界级确定性随机源。PCG32、零分配、Burst 友好；拷贝结构体即快照，赋回即回滚。
+  `default(Pcg32)` 首次取值时归一化序列（不会退化恒 0）；`NextInt` 用拒绝采样避免取模偏差。
+
+- **`World.TrackChanges<T>` / `UntrackChanges<T>` / `IsTrackingChanges<T>` / `GetChangeLog<T>` / `ChangeLogTick`**
+  与 `ComponentChangeLog<T>` / `ComponentChange<T>` / `ComponentChangeKind`：
+  按类型 opt-in 的定长环形变更记录（实体 / 种类 / Tick / Sequence / 旧值 / 新值），写入零分配。
+
+### Changed
+
+- `SystemInfoDebugView` 新增 `HasEntityDestroyingHook`；`system_status` / `get_system_info` 的 hooks 输出同步增加 `entityDestroying`。
+- MCP `get_dependency_graph` 增补每系统 `readComponents` / `writeComponents` 与每条边的 `reason` / `conflictType`（既有字段不变）。
+- 新增 MCP 命令 **`validate_access`**（Diagnostic，共 55 条）：导出每 ticker 每系统的
+  missing/over-declared 访问声明，`enableTracking` 为持久开关（跨调用保持，传 false 清除）。
+
+### Notes
+
+- **变更记录的覆盖边界**：只覆盖 `SetComponent` / `AddComponent` / `RemoveComponent`（Entity 与 int 两个重载）
+  及 `SystemContext.Set`。批量接口、ECB 回放、`SetComponentRaw`、`ref T` 就地写字段**不记录**。
+- `World` 没有帧概念，变更记录的帧号由调用方写 `world.ChangeLogTick`；`Sequence` 是世界内单调序号。
+- 新增 `tests/Unit` 用例：句柄判活/解析、销毁钩子时序、查询解释与 pending 过滤、随机序列与快照、
+  变更环形缓冲、依赖边原因。依赖原生容器的用例在 CLI 下按既有约定 `Ignore`，需在 Unity Test Runner 执行。
+- `DependencyGraph.BuildLayers` 的层划分算法未改动，本次只补边的可解释性。
+
 ## [1.13.2] — 修复 chunk 泄漏：DestroyEntity 漏回拨 firstNonFullIndex
 
 ### Fixed
