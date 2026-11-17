@@ -59,6 +59,7 @@ https://github.com/NormanYUE/Ember-Framework.git
 12. [性能与诊断](#12-性能与诊断)
 13. [架构概览](#13-架构概览)
 14. [MCP Server](#14-mcp-server)
+15. [确定性随机与变更记录](#15-确定性随机与变更记录)
 
 ---
 
@@ -286,6 +287,21 @@ world.Instantiate("Projectile", roots.AsSpan());
 ```
 
 批量 API 会一次性预检实体上限、Singleton 和 Chunk 预算，并按模板树的最终 Archetype 预留行。每棵树完成默认组件与父子层级初始化后才发送 created 回调。批量 created 回调期间禁止创建/销毁实体、增删组件或释放 World；listener 抛异常时当前 root 保留，后续 roots 不创建。
+
+### 3.6 带版本号的实体句柄与判活
+
+`Entity` 是 `(Index, Version)` 两个 `int`，总共 8 字节，可直接放进 `NativeArray<Entity>` / `NativeHashSet<Entity>`。实体销毁时槽位版本自增，索引随后被回收复用 —— 所以**只存 `int` 索引会失去 stale 检测**。
+
+```csharp
+// 版本感知判活：槽位被复用时旧句柄自动失效
+if (world.IsAlive(handle)) { /* 仍是同一个实体 */ }
+
+// 或一次性拿到当前存活句柄
+if (world.TryResolve(handle, out var live))
+    world.SetComponent(live, new Health { Value = 10 });
+```
+
+`world.IsAlive(int entityIndex)` 保留原有语义（**只看存档位是否被占用，忽略版本**），持有句柄时应改用 `IsAlive(Entity)` 或 `TryResolve`。传 stale 句柄给 `GetComponent` / `SetComponent` 会抛 `InvalidOperationException`，异常消息里带 `Entity(index, vN)`，不会静默命中复用后的新实体。
 
 ---
 
@@ -642,7 +658,7 @@ world.DestroyBuffer<DamageRecord>(damageLog);
 
 ```csharp
 // 添加元素
-world.AddBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
+world.AppendBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
 
 // 读取
 BufferSpan<DamageRecord> span = world.GetBuffer<DamageRecord>(damageLog);
@@ -687,9 +703,66 @@ unsafe
 
 ## 7. 实体动态数组（IBufferElement）
 
-`IBufferElement` 允许**每个实体独立携带**多个同类型元素，类似 per-entity 动态数组。适用于技能列表、伤害队列、Buff 叠加等场景。底层使用托管 `List<T>`，通过 Entity 直接访问。
+`IBufferElement` 允许**每个实体独立携带**多个同类型元素，类似 per-entity 动态数组。适用于技能列表、伤害队列、Buff 叠加等场景。
 
-> 注意：`World.AddBufferElement(BufferHandle, ...)` 和 `World.AddBufferElement(Entity, ...)` 是**两个不同的方法**——前者操作 §6 的句柄式 Buffer，后者操作本条目的实体数组。签名不同，不会混淆。
+底层存储与 §6 是**同一套** `BufferStore<T>`（原生 `NativeList<T>` + 范围句柄），区别只在句柄存在谁那里：句柄式由你持有并手动销毁，实体式由 World 内部持有、随 `DestroyEntity` 自动回收。所以两边的扩容、删除、碎片策略完全一致，实体 buffer 扩容也不产生托管分配。
+
+### 7.0 两族 API 对照
+
+句柄式（§6，共享池）与实体式（§7，每实体独立）方法名前缀不同，避免同名重载误用：
+
+| 语义 | 句柄式 | 实体式 |
+| --- | --- | --- |
+| 取视图 | `GetBuffer(handle)` → `BufferSpan<T>` | `GetEntityBuffer(entity)` → `BufferElementAccessor<T>` |
+| 追加 | `AppendBufferElement(handle, v)` | `AppendEntityBufferElement(entity, v)` |
+| 设值 | `SetBufferElement(handle, i, v)` | `SetEntityBufferElement(entity, i, v)` |
+| 删除（swap-back） | `RemoveBufferElementAtSwapBack(handle, i)` | `RemoveEntityBufferElementAt(entity, i)` |
+| 清空 | `ClearBuffer(handle)` | `ClearEntityBuffer(entity)` |
+| 长度 | `GetBufferLength(handle)` | `GetEntityBufferCount(entity)` |
+| 创建 / 销毁 | `CreateBuffer` / `DestroyBuffer` | 随实体创建与销毁 |
+
+> 旧名 `GetBufferElement` / `AddBufferElement` / `RemoveBufferElementAt` / `ClearBufferElements` / `GetBufferElementCount` 保留为 `[Obsolete]` 转发，用于兼容已有调用；下一个大版本再移除。
+
+### 7.1 预分配与 Job/Burst 快速视图
+
+`BufferView<T>` 是固定容量的原生租约，可作为 Unity Job 字段。`TryAppend` 容量不足时返回 `false`，不会在循环里扩容；`RemoveAtSwapBack` 不保持顺序。容量预留、获取/归还租约与 Job 调度应放在逐元素循环之外。
+
+```csharp
+var handle = world.CreateBuffer<long>(initialCapacity: 100_000);
+world.ReserveBufferCapacity(handle, 100_000);   // setup 阶段冻结该 buffer 容量，数据区不再搬移
+// 或在 store 级别冻结：world.ReserveBufferStoreCapacity<long>(200_000);
+// 用完解除：world.ReleaseBufferStoreCapacityReservation<long>();
+
+var view = world.GetBufferView<long>(handle);
+world.AssertBufferViewValid(view);              // 调度前显式检查（IsBufferViewValid 返回 bool）
+try
+{
+    var job = new FillBufferJob { View = view };
+    job.Schedule().Complete();
+}
+finally
+{
+    world.ReleaseBufferView(view);
+}
+
+// Job 源码放在 Unity 编译的消费方程序集里。
+[BurstCompile(CompileSynchronously = true)]
+public struct FillBufferJob : IJob
+{
+    public BufferView<long> View;
+    public void Execute()
+    {
+        for (int i = 0; i < 100_000; i++)
+            if (!View.TryAppend(i)) break;
+    }
+}
+```
+
+实体访问器也可用 `AcquireView()` / `ReleaseView(view)` 获取同一存储上的租约。单线程 `IJob` 可增删元素；`IJobParallelFor` 只能在预先确定的长度内按互不重叠的下标读写，不能并行修改长度。
+
+租约持有期间，框架拒绝对应 buffer 的 World/accessor 修改、实体销毁与 World 释放；先完成 Job、再归还租约。Unity 原生容器安全检查开启时，也会拒绝在 Job 完成前释放令牌或从主线程访问在用视图。Player 关闭这些检查时，调用方仍须遵守依赖和释放顺序。`UnsafePtr` 是显式的无检查访问入口：取出的指针不得在租约归还、存储释放或 Job 仍在使用时访问。
+
+性能比较应分开报告安全索引器、批量指针和 Burst 内核；后两者的结果不代表每次调用 World API 的成本。原生内存也需要分配和释放，预分配后操作窗口的 0 GC 不包含初始化、扩容及租约获取成本。
 
 ### 定义缓冲区元素
 
@@ -706,26 +779,29 @@ public struct DamageRecord : IBufferElement
 ```csharp
 var entity = world.CreateEntity();
 
-// 添加元素
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
+// 追加元素（buffer 不存在时自动创建，容量不足按 2 的幂扩容）
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
 
-// 获取访问器
-BufferElementAccessor<DamageRecord> buffer = world.GetBufferElement<DamageRecord>(entity);
-for (int i = 0; i < buffer.Length; i++)
-    Debug.Log(buffer[i].Amount);
+// 取访问器：Add / RemoveAt / Clear 与索引器都在它上面
+BufferElementAccessor<DamageRecord> buffer = world.GetEntityBuffer<DamageRecord>(entity);
+buffer.Add(new DamageRecord { Source = attacker, Amount = 10 });
+buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };   // 值语义，赋回整元素
+int count = buffer.Length;
 
-// 修改元素
-buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };
+// 热循环：取 span（快照，增删/扩容后必须重新取）
+var span = buffer.AsSpan();
+for (int i = 0; i < span.Length; i++)
+    span[i].Amount *= 2;
 
-// 移除元素（与最后一个交换）
-world.RemoveBufferElementAt<DamageRecord>(entity, 0);
+// 删除（与最后一个交换，不保序）与清空
+buffer.RemoveAt(0);
+buffer.Clear();
 
-// 清空
-world.ClearBufferElements<DamageRecord>(entity);
-
-// 获取数量
-int count = world.GetBufferElementCount<DamageRecord>(entity);
+// 也可以只走 World 的单次接口
+int n = world.GetEntityBufferCount<DamageRecord>(entity);
+world.RemoveEntityBufferElementAt<DamageRecord>(entity, 0);
+world.ClearEntityBuffer<DamageRecord>(entity);
 ```
 
 缓冲区元素在实体销毁时自动清理。
@@ -871,6 +947,31 @@ for (int i = 0; i < entities.Length; i++)
 // 清空标记（帧末调用）
 world.ClearDeferredDestroyEntities();
 ```
+
+### 10.4 迭代时跳过待销毁实体
+
+已标记 deferred destroy、但本帧还没真正销毁的实体默认仍会出现在查询结果里。需要「只处理不会消失的实体」时显式跳过：
+
+```csharp
+foreach (var row in query.AsRows().WithoutPendingDestroy())
+    row.RW<Velocity>() = ...;
+```
+
+这是**行级**过滤（每行一次 marker 查表），默认关闭；`EntityQuery` 的 `All/Any/None` 是 archetype 级条件，pending destroy 是逐实体标记，两者粒度不同，所以不能写进查询条件里。内部判定走 `world.ContainsDeferredDestroyEntity(entity)`，本身是版本感知的。
+
+### 10.5 销毁前置钩子
+
+```csharp
+protected override void OnEntityDestroying(Entity entity)
+{
+    // 实体仍存活、组件可读：在这里记账、转移数据、结算掉落
+    ref readonly var loot = ref ctx.Read<LootTable>(entity);
+}
+```
+
+在 teardown（`Alive=false`、`Version++`、行移出 chunk）**之前**调用，所以能读到组件；通知期间禁止结构变更（会抛 `InvalidOperationException`），需要增删改请写 `ECB`，在 tick 结束回放。
+
+`OnEntityDestroyed` 仍是 teardown **之后**的通知：只能知道它没了，读不到数据，两者不要混用。覆写了新钩子的系统在 `system_status` / `get_system_info` 的 `hooks.entityDestroying` 中可见。
 
 ---
 
@@ -1020,6 +1121,42 @@ dotnet build tests/Performance/Ember.Performance.csproj -c Release
 ```
 
 基准覆盖组件读写、chunk 列访问、query cache、AddComponent/RemoveComponent、tag add/remove、批量结构变化、ComponentPack 和 GC allocation。基准使用真实 `World` / `Chunk` / `Unity.Collections.NativeArray` 路径，实际跑分需要 Unity 兼容运行时；普通 .NET CLI 可编译工程，但不能执行 Unity native ECall-backed `NativeArray` 分配。cached query、chunk column 读写与 warmed ComponentPack build/write 应保持 0 GC。
+
+### 12.5 单实体诊断与查询解释
+
+```csharp
+var view = world.Describe(entity);
+// → Alive / Version / Placed / ArchetypeIndex / ChunkIndex / Row / ComponentNames
+
+var why = QueryExplainer.Explain(world, EntityQuery.With<Position, Velocity>().Build(), entity);
+// why.Matched      : 是否命中
+// why.MissingAll   : All 里缺的组件名
+// why.BlockedByNone: 被 None 排除的组件名
+// why.Reason       : 一句话原因（可直接打日志）
+```
+
+`Describe` 对 stale 句柄返回 `Alive=false` + **当前槽位版本**，不暴露当前占用者的组件名；`QueryExplainer` 会区分「索引越界（从未存在）」「版本不匹配（已销毁/被复用）」「存活但未落位（迭代中新创建）」。两者只在诊断路径调用，不进热路径。
+
+### 12.6 依赖边原因与运行期访问校验
+
+`SystemTicker.GetDependencyGraphDebugView()` 的每条边现在带原因：
+
+```csharp
+var graph = ticker.GetDependencyGraphDebugView();
+foreach (var layer in graph.Layers)
+    foreach (var edge in layer.Edges)
+        Debug.Log($"{edge.FromIndex}->{edge.ToIndex} {edge.Reason} {edge.ConflictType.Value}");
+// Reason: UndeclaredAccess / StructuralChanges / MaskConflict
+```
+
+访问校验（实际访问 vs `DeclareAccess` 声明）在调试窗口打开或 `EmberEditorGuard.ForcePerfCollect` 为 true 时录制，可直接调用：
+
+```csharp
+var results = ticker.GetAllValidationResults();
+// MissingReads / MissingWrites / OverDeclaredReads / OverDeclaredWrites / MissingStructuralChanges
+```
+
+Editor 侧对应命令是 `validate_access`，也接受 `tickerIndex` 过滤。
 
 ---
 
@@ -1265,7 +1402,7 @@ Skills 是项目级文件，适合随 Unity 项目提交和共享；安装后重
 | `--port <n>` | 手动指定端口。通常不需要；只有在状态文件不可用且明确知道端口时使用 |
 | `--status-dir <path>` | 指定 Bridge status 文件目录，默认 `~/.ember` |
 
-### 14.3 Command Reference (54 commands via `ember_execute`)
+### 14.3 Command Reference (55 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
@@ -1273,7 +1410,7 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 **Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (12):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph
+**Diagnostic (13):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph, validate_access
 **System (3):** system_status, get_system_info, advance_frame
 **Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
@@ -1322,3 +1459,41 @@ Example: `{"op": "get_system_info", "tickerIndex": 0, "systemName": "MovementSys
 - **Unity Console**：过滤 `[Ember MCP]` 前缀，可查看 Bridge 启动状态、客户端连接/断开、请求方法名和截断的 JSON 内容
 - **Ember MCP 窗口 → Request Log**：实时显示最近 100 条请求的方法名、响应耗时（ms）和结果预览
 - **`mcp_status` 命令**：返回 `running/state/reason/reloading/statusFile/statusSeq/clientCount`，用于区分 Bridge 未启动、Unity reloading、端口占用和客户端未连接等状态
+
+---
+
+## 15. 确定性随机与变更记录
+
+### 15.1 world.Rng
+
+```csharp
+world.SetRandomSeed(20260101);              // 同种子 → 同序列
+var snapshot = world.Rng;                   // 值类型拷贝即快照
+
+var dice = world.Rng.NextInt(1, 7);         // [1, 7)
+var speed = world.Rng.NextFloat(0.8f, 1.2f);
+
+world.Rng = snapshot;                       // 回滚到采样点
+world.RestoreRandomState(state, sequence);  // 或用 Pcg32.FromState 按精确状态还原
+```
+
+- PCG32，零分配、Burst 友好；`default(Pcg32)` 在首次取值时自动归一化序列，不会退化成恒 0。
+- `NextInt(max)` 用拒绝采样，避免取模偏差（有重试上限，不会无界循环）。
+- 需要复现「为什么它选了那一块」时，系统里不要再调 `UnityEngine.Random` —— 它无法快照。
+
+### 15.2 组件变更环形缓冲
+
+```csharp
+var log = world.TrackChanges<Health>(capacity: 4096);  // opt-in，按类型注册
+world.ChangeLogTick = frame;                           // World 无帧概念，帧号由调用方写入
+world.SetComponent(e, new Health { Value = 5 });
+
+var change = log[log.Count - 1];
+// change.Entity / Kind / Tick / Sequence / OldValue / NewValue：一次定位「哪帧、哪个系统、从多少变到多少」
+world.UntrackChanges<Health>();                        // 关闭并丢弃记录
+```
+
+覆盖范围：`SetComponent` / `AddComponent` / `RemoveComponent`（Entity 与 int 两个重载）以及经由它们转发的 `SystemContext.Set`。
+**不覆盖**：`AddComponentBatch` / `RemoveComponentBatch`、ECB 回放、`SetComponentRaw`，以及通过 `ref T` 就地改字段的写入。
+
+缓冲定长环形，写满覆盖最旧，写入零分配；`TotalRecorded` 是累计条数（含已被覆盖的）。未注册的类型不记录、不分配。

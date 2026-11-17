@@ -2,6 +2,92 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.15.0] — 原生 buffer 视图（Job/Burst）、容量预留与实体 buffer API 改名
+
+### Added
+
+- **`BufferView<T>`**：固定容量的原生 buffer 视图，可作为字段传给 `IJob` / `IJobParallelFor`（含 Burst）。
+  通过 `World.GetBufferView<T>(handle)` 取得、`World.ReleaseBufferView(view)` 归还；同一 buffer 同时只允许一个视图。
+  视图内含 Unity 原生生命周期令牌，`Length` / 索引器 / `ElementAt` / `RemoveAtSwapBack` 走令牌 + 租约 + 边界检查，
+  `UnsafePtr` / `UnsafePtrAt` 是显式无检查入口。`TryAppend` 容量不足返回 `false`，不会在循环里扩容或分配。
+
+- **容量预留**：`World.ReserveBufferCapacity<T>(handle, capacity)`（单个 buffer）与
+  `World.ReserveBufferStoreCapacity<T>(totalElements)`（整个 store），用
+  `World.ReleaseBufferStoreCapacityReservation<T>()` 解除。预分配后兄弟 buffer 扩容不会搬移本 buffer 的指针。
+
+- **`World.IsBufferViewValid<T>` / `World.AssertBufferViewValid<T>`**：调度前的显式检查点。
+
+- **`BufferElementAccessor<T>.AsSpan()` / `AcquireView()` / `ReleaseView(view)`**：实体 buffer 也能直接取 span 与 Job 视图。
+
+- 新增单元测试 `BufferViewTests`、`EntityBufferStorageTests`，以及示例工程的 buffer 存储 / Job / Burst 回归。
+
+### Changed
+
+- **实体 buffer API 改名**（旧名保留为 `[Obsolete]` 转发，下一个大版本移除）：
+  `GetEntityBuffer` / `AppendEntityBufferElement` / `SetEntityBufferElement` / `RemoveEntityBufferElementAt` /
+  `ClearEntityBuffer` / `GetEntityBufferCount`。句柄式追加改为 `AppendBufferElement(handle, value)`，
+  旧名 `AddBufferElement(handle, value)` 标记 `[Obsolete]`。
+
+- **`BufferSpan<T>` 明确为快照语义**：`Length` 在取得时固定；增删、清空、扩容、`ResizeBuffer` 后必须重新获取。
+  开启安全检查的构建里使用过期 span 会抛 `InvalidOperationException`，发布构建不强制。
+
+- 实体 buffer 与句柄式 buffer 共用同一套 `BufferStore<T>` 存储（原生 `NativeList<T>` + 范围表），
+  扩容、删除、碎片策略一致。
+
+### Fixed
+
+- 实体 buffer 扩容不再靠文档约定：安全检查构建下，store 级结构版本会拒绝过期 span 的访问。
+- `DestroyEntity` / `World.Dispose` 在 teardown 之前预检未归还的 `BufferView` 租约；有未归还视图时抛异常且状态不变。
+
+## [1.14.0] — 版本感知句柄、销毁前置钩子、确定性随机与变更记录
+
+### Added
+
+- **`World.IsAlive(Entity)` / `World.TryResolve(Entity, out Entity)`**：按 `Index + Version` 判活。
+  实体销毁后槽位版本自增、索引随后被回收复用，只存 `int` 索引会失去 stale 检测。
+  `IsAlive(int)` 语义不变（只看槽位占用、忽略版本），已在文档里标明。
+
+- **`EcsSystem.OnEntityDestroying(Entity)`**：销毁**前置**钩子，在 `Alive=false`、`Version++`、
+  行出 chunk **之前**调用，组件数据完整可读。通知期间禁止结构变更（抛 `InvalidOperationException`），
+  需要增删改请写 `ECB` 在 tick 结束回放。`OnEntityDestroyed` 仍是 teardown 之后的通知。
+
+- **`World.Describe(Entity)`**：单实体诊断快照（存活 / 版本 / 是否落位 / archetype-chunk-row / 组件名）。
+  stale 句柄返回 `Alive=false` + 当前槽位版本，且不会暴露当前占用者的组件名。
+
+- **`QueryExplainer.Explain(world, query, entity)`**：回答「这个实体为什么没被这条查询命中」，
+  区分 `MissingAll` / `BlockedByNone` / `Any` 未满足，并区分索引越界、版本不匹配、存活但未落位。
+
+- **`QueryEnumerable.WithoutPendingDestroy()`**：迭代时跳过已标记 deferred destroy 但本帧尚未销毁的实体。
+  行级过滤，默认关闭；pending destroy 是逐实体标记，无法表达为 archetype 级的 `EntityQuery` 条件。
+
+- **`DependencyEdgeDebugView.Reason` / `.ConflictType`** + **`DependencyReason`** 枚举：
+  依赖边现在带产生原因（`UndeclaredAccess` / `StructuralChanges` / `MaskConflict`），
+  mask 冲突时给出具体组件类型。判定逻辑抽到 `DependencyReasonResolver`，可单测覆盖。
+
+- **`World.Rng`（`ref Pcg32`）/ `Pcg32` / `SetRandomSeed` / `RestoreRandomState` / `Pcg32.FromState`**：
+  世界级确定性随机源。PCG32、零分配、Burst 友好；拷贝结构体即快照，赋回即回滚。
+  `default(Pcg32)` 首次取值时归一化序列（不会退化恒 0）；`NextInt` 用拒绝采样避免取模偏差。
+
+- **`World.TrackChanges<T>` / `UntrackChanges<T>` / `IsTrackingChanges<T>` / `GetChangeLog<T>` / `ChangeLogTick`**
+  与 `ComponentChangeLog<T>` / `ComponentChange<T>` / `ComponentChangeKind`：
+  按类型 opt-in 的定长环形变更记录（实体 / 种类 / Tick / Sequence / 旧值 / 新值），写入零分配。
+
+### Changed
+
+- `SystemInfoDebugView` 新增 `HasEntityDestroyingHook`；`system_status` / `get_system_info` 的 hooks 输出同步增加 `entityDestroying`。
+- MCP `get_dependency_graph` 增补每系统 `readComponents` / `writeComponents` 与每条边的 `reason` / `conflictType`（既有字段不变）。
+- 新增 MCP 命令 **`validate_access`**（Diagnostic，共 55 条）：导出每 ticker 每系统的
+  missing/over-declared 访问声明，`enableTracking` 为持久开关（跨调用保持，传 false 清除）。
+
+### Notes
+
+- **变更记录的覆盖边界**：只覆盖 `SetComponent` / `AddComponent` / `RemoveComponent`（Entity 与 int 两个重载）
+  及 `SystemContext.Set`。批量接口、ECB 回放、`SetComponentRaw`、`ref T` 就地写字段**不记录**。
+- `World` 没有帧概念，变更记录的帧号由调用方写 `world.ChangeLogTick`；`Sequence` 是世界内单调序号。
+- 新增 `tests/Unit` 用例：句柄判活/解析、销毁钩子时序、查询解释与 pending 过滤、随机序列与快照、
+  变更环形缓冲、依赖边原因。依赖原生容器的用例在 CLI 下按既有约定 `Ignore`，需在 Unity Test Runner 执行。
+- `DependencyGraph.BuildLayers` 的层划分算法未改动，本次只补边的可解释性。
+
 ## [1.13.2] — 修复 chunk 泄漏：DestroyEntity 漏回拨 firstNonFullIndex
 
 ### Fixed

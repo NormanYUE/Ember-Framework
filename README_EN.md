@@ -59,6 +59,7 @@ https://github.com/NormanYUE/Ember-Framework.git
 12. [Performance and Diagnostics](#12-performance-and-diagnostics)
 13. [Architecture Overview](#13-architecture-overview)
 14. [MCP Server](#14-mcp-server)
+15. [Deterministic Random and Change Log](#15-deterministic-random-and-change-log)
 
 ---
 
@@ -285,6 +286,21 @@ world.Instantiate("Projectile", roots.AsSpan());
 ```
 
 The batch API validates entity limits, singleton ownership, and chunk budget once, then reserves rows for the final archetypes of the complete template tree. Created callbacks run only after each root has complete defaults and hierarchy. Creating or destroying entities, adding or removing components, and disposing the World are blocked during batch-created callbacks. If a listener throws, the current root remains committed and later roots are not created.
+
+### 3.6 Versioned Entity Handles
+
+`Entity` is `(Index, Version)` — two `int`s, 8 bytes total — so it fits directly into `NativeArray<Entity>` / `NativeHashSet<Entity>`. Destroying an entity increments the slot version and the index is later recycled, so **storing only the `int` index loses stale detection**.
+
+```csharp
+// Version-aware liveness: a recycled slot invalidates the old handle
+if (world.IsAlive(handle)) { /* still the same entity */ }
+
+// Or resolve to the current live handle in one call
+if (world.TryResolve(handle, out var live))
+    world.SetComponent(live, new Health { Value = 10 });
+```
+
+`world.IsAlive(int entityIndex)` keeps its original meaning (**slot occupied or not, version ignored**); use `IsAlive(Entity)` or `TryResolve` when you hold a handle. Passing a stale handle to `GetComponent` / `SetComponent` throws `InvalidOperationException` whose message carries `Entity(index, vN)` — it never silently resolves to the recycled entity.
 
 ---
 
@@ -642,7 +658,7 @@ world.DestroyBuffer<DamageRecord>(damageLog);
 
 ```csharp
 // Add an element
-world.AddBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
+world.AppendBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
 
 // Read
 BufferSpan<DamageRecord> span = world.GetBuffer<DamageRecord>(damageLog);
@@ -687,9 +703,66 @@ unsafe
 
 ## 7. Entity Dynamic Arrays (IBufferElement)
 
-`IBufferElement` allows **each entity** to independently carry multiple elements of the same type — analogous to per-entity dynamic arrays. Suitable for skill lists, damage queues, buff stacking, etc. Backed by a managed `List<T>` internally, accessed directly via Entity.
+`IBufferElement` allows **each entity** to independently carry multiple elements of the same type — analogous to per-entity dynamic arrays. Suitable for skill lists, damage queues, buff stacking, etc.
 
-> Note: `World.AddBufferElement(BufferHandle, ...)` and `World.AddBufferElement(Entity, ...)` are **two different methods** — the former operates on Section 6 handle-based buffers, the latter on per-entity buffers described in this section. Signatures differ and are unambiguous.
+Storage is the **same** `BufferStore<T>` as Section 6 (native `NativeList<T>` + range handles). The only difference is who holds the handle: for handle-based buffers you hold it and destroy it explicitly; for entity buffers the World holds it and releases it on `DestroyEntity`. Growth, removal and fragmentation behaviour are therefore identical, and growing an entity buffer allocates no managed memory.
+
+### 7.0 API Family Mapping
+
+Handle-based (Section 6, shared pool) and entity-based (Section 7, per-entity) methods use different prefixes so the two never collide:
+
+| Semantics | Handle-based | Entity-based |
+| --- | --- | --- |
+| View | `GetBuffer(handle)` → `BufferSpan<T>` | `GetEntityBuffer(entity)` → `BufferElementAccessor<T>` |
+| Append | `AppendBufferElement(handle, v)` | `AppendEntityBufferElement(entity, v)` |
+| Set | `SetBufferElement(handle, i, v)` | `SetEntityBufferElement(entity, i, v)` |
+| Remove (swap-back) | `RemoveBufferElementAtSwapBack(handle, i)` | `RemoveEntityBufferElementAt(entity, i)` |
+| Clear | `ClearBuffer(handle)` | `ClearEntityBuffer(entity)` |
+| Length | `GetBufferLength(handle)` | `GetEntityBufferCount(entity)` |
+| Create / destroy | `CreateBuffer` / `DestroyBuffer` | tied to entity creation/destruction |
+
+> The old `GetBufferElement` / `AddBufferElement` / `RemoveBufferElementAt` / `ClearBufferElements` / `GetBufferElementCount` names remain as `[Obsolete]` forwarding aliases for compatibility. Removal is deferred to the next major version.
+
+### 7.1 Preallocated Job/Burst views
+
+`BufferView<T>` is a fixed-capacity native lease that can be stored in a Unity Job. `TryAppend` returns `false` when full and never grows storage inside the loop. `RemoveAtSwapBack` does not preserve order. Reserve capacity, acquire/release the lease and schedule Jobs outside the per-element loop.
+
+```csharp
+var handle = world.CreateBuffer<long>(initialCapacity: 100_000);
+world.ReserveBufferCapacity(handle, 100_000);   // freeze this buffer during setup so storage never relocates
+// Or freeze the whole store: world.ReserveBufferStoreCapacity<long>(200_000);
+// Release when done: world.ReleaseBufferStoreCapacityReservation<long>();
+
+var view = world.GetBufferView<long>(handle);
+world.AssertBufferViewValid(view);              // explicit pre-schedule check (IsBufferViewValid returns bool)
+try
+{
+    var job = new FillBufferJob { View = view };
+    job.Schedule().Complete();
+}
+finally
+{
+    world.ReleaseBufferView(view);
+}
+
+// Keep Job source in a Unity-compiled consumer assembly.
+[BurstCompile(CompileSynchronously = true)]
+public struct FillBufferJob : IJob
+{
+    public BufferView<long> View;
+    public void Execute()
+    {
+        for (int i = 0; i < 100_000; i++)
+            if (!View.TryAppend(i)) break;
+    }
+}
+```
+
+Entity accessors also expose `AcquireView()` / `ReleaseView(view)` over the same storage. A serial `IJob` may append/remove elements. An `IJobParallelFor` may only access distinct fixed indices within a length established before scheduling; parallel length changes are not supported.
+
+While a lease is outstanding, corresponding World/accessor mutations, entity destruction and World disposal are rejected. Complete the Job before releasing its view. With Unity native collection safety checks enabled, disposing the token early or accessing an in-use view from the main thread is also rejected. Players with these checks disabled still require the caller to obey dependencies and release order. `UnsafePtr` explicitly bypasses checks: do not access escaped pointers after releasing the lease or storage, or concurrently with a Job that uses them.
+
+Report checked indexing, batch pointer access and Burst kernels separately; their results do not represent repeated World API calls. Native memory still has allocation/disposal costs. A zero-GC preallocated operation window excludes initialization, growth and lease acquisition.
 
 ### Defining Buffer Elements
 
@@ -706,26 +779,29 @@ public struct DamageRecord : IBufferElement
 ```csharp
 var entity = world.CreateEntity();
 
-// Add elements
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
+// Append elements (the buffer is created on demand and grows by powers of two)
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
 
-// Get accessor
-BufferElementAccessor<DamageRecord> buffer = world.GetBufferElement<DamageRecord>(entity);
-for (int i = 0; i < buffer.Length; i++)
-    Debug.Log(buffer[i].Amount);
+// Get the accessor: Add / RemoveAt / Clear and the indexer live on it
+BufferElementAccessor<DamageRecord> buffer = world.GetEntityBuffer<DamageRecord>(entity);
+buffer.Add(new DamageRecord { Source = attacker, Amount = 10 });
+buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };   // value semantics: assign the whole element
+int count = buffer.Length;
 
-// Modify element
-buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };
+// Hot loop: take a snapshot span (re-acquire after add/remove/growth)
+var span = buffer.AsSpan();
+for (int i = 0; i < span.Length; i++)
+    span[i].Amount *= 2;
 
-// Remove element (swap-back with last)
-world.RemoveBufferElementAt<DamageRecord>(entity, 0);
+// Remove (swap-back, order is not preserved) and clear
+buffer.RemoveAt(0);
+buffer.Clear();
 
-// Clear
-world.ClearBufferElements<DamageRecord>(entity);
-
-// Get count
-int count = world.GetBufferElementCount<DamageRecord>(entity);
+// The World-level one-shot calls are also available
+int n = world.GetEntityBufferCount<DamageRecord>(entity);
+world.RemoveEntityBufferElementAt<DamageRecord>(entity, 0);
+world.ClearEntityBuffer<DamageRecord>(entity);
 ```
 
 Buffer elements are automatically cleaned up when the entity is destroyed.
@@ -871,6 +947,31 @@ for (int i = 0; i < entities.Length; i++)
 // Clear markers (call at end of frame)
 world.ClearDeferredDestroyEntities();
 ```
+
+### 10.4 Skipping Pending-Destroy Entities During Iteration
+
+Entities marked for deferred destruction but not yet destroyed still appear in query results for the rest of the frame. Skip them explicitly when you need "only entities that will still be there":
+
+```csharp
+foreach (var row in query.AsRows().WithoutPendingDestroy())
+    row.RW<Velocity>() = ...;
+```
+
+This is a **row-level** filter (one marker lookup per row) and is off by default. `EntityQuery`'s `All/Any/None` are archetype-level conditions while pending destroy is a per-entity marker, so it cannot be expressed as a query condition. The check routes through `world.ContainsDeferredDestroyEntity(entity)`, which is itself version-aware.
+
+### 10.5 Pre-Destroy Hook
+
+```csharp
+protected override void OnEntityDestroying(Entity entity)
+{
+    // Entity is still alive and components are readable: book keeps, move data, resolve drops
+    ref readonly var loot = ref ctx.Read<LootTable>(entity);
+}
+```
+
+Runs **before** teardown (`Alive=false`, `Version++`, row removed from the chunk), so component data is readable. Structural changes are rejected while the hook runs (they throw `InvalidOperationException`) — record them in the `ECB` and let playback apply them at the end of the system tick.
+
+`OnEntityDestroyed` remains the **post**-teardown notification: it only tells you the entity is gone and cannot read data. Do not mix the two. Systems overriding the new hook surface as `hooks.entityDestroying` in `system_status` / `get_system_info`.
 
 ---
 
@@ -1020,6 +1121,42 @@ dotnet build tests/Performance/Ember.Performance.csproj -c Release
 ```
 
 Benchmarks cover component read/write, chunk column access, query cache, AddComponent/RemoveComponent, tag add/remove, batch structural changes, ComponentPack, and GC allocation. Benchmarks use real `World` / `Chunk` / `Unity.Collections.NativeArray` paths. Actual profiling requires a Unity-compatible runtime; plain .NET CLI can compile the project but cannot execute Unity native ECall-backed `NativeArray` allocations. Cached queries, chunk column reads/writes, and warmed ComponentPack build/write should maintain 0 GC.
+
+### 12.5 Single-Entity Diagnostics and Query Explanation
+
+```csharp
+var view = world.Describe(entity);
+// -> Alive / Version / Placed / ArchetypeIndex / ChunkIndex / Row / ComponentNames
+
+var why = QueryExplainer.Explain(world, EntityQuery.With<Position, Velocity>().Build(), entity);
+// why.Matched      : whether the query matches
+// why.MissingAll   : component names missing from All
+// why.BlockedByNone: component names that None excludes
+// why.Reason       : one-line reason, safe to log
+```
+
+`Describe` returns `Alive=false` plus the **current slot version** for a stale handle and never exposes the current occupant's component names. `QueryExplainer` distinguishes "index out of range (never existed)", "version mismatch (destroyed or recycled)", and "alive but not yet placed (created during iteration)". Both are diagnostic-path calls, not hot path.
+
+### 12.6 Dependency Edge Reasons and Runtime Access Validation
+
+Every edge from `SystemTicker.GetDependencyGraphDebugView()` now carries a reason:
+
+```csharp
+var graph = ticker.GetDependencyGraphDebugView();
+foreach (var layer in graph.Layers)
+    foreach (var edge in layer.Edges)
+        Debug.Log($"{edge.FromIndex}->{edge.ToIndex} {edge.Reason} {edge.ConflictType.Value}");
+// Reason: UndeclaredAccess / StructuralChanges / MaskConflict
+```
+
+Access validation (actual access vs `DeclareAccess`) is recorded while the debug window is open or `EmberEditorGuard.ForcePerfCollect` is true:
+
+```csharp
+var results = ticker.GetAllValidationResults();
+// MissingReads / MissingWrites / OverDeclaredReads / OverDeclaredWrites / MissingStructuralChanges
+```
+
+The matching Editor command is `validate_access`, which also accepts a `tickerIndex` filter.
 
 ---
 
@@ -1269,7 +1406,7 @@ Skills are project-level files intended to be committed and shared with the Unit
 | `--port <n>` | Manually specify a port. Usually unnecessary; use only when the status file is unavailable and the port is known |
 | `--status-dir <path>` | Override the Bridge status directory. Defaults to `~/.ember` |
 
-### 14.3 Command Reference (54 commands via `ember_execute`)
+### 14.3 Command Reference (55 commands via `ember_execute`)
 
 The `ember_execute` tool accepts a `commands` array. Each command has an `op` field.
 
@@ -1277,7 +1414,7 @@ The `ember_execute` tool accepts a `commands` array. Each command has an `op` fi
 **Write (9):** create_entity, destroy_entity, add_component, remove_component, set_component, set_singleton, create_child_entity, attach_child, detach_child
 **Batch (2):** add_component_batch, remove_component_batch
 **Buffer (5):** add_buffer_element, remove_buffer_element, clear_buffer_elements, set_buffer_element, get_buffer
-**Diagnostic (12):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph
+**Diagnostic (13):** mcp_status, component_schema, validate_component_payload, resolve_component, world_snapshot, snapshot_diff, get_ecs_status, capabilities, perf_summary, archetype_layout_report, get_hierarchy, get_dependency_graph, validate_access
 **System (3):** system_status, get_system_info, advance_frame
 **Editor Control (4):** playmode_control, set_time_scale, reload_scene, reload_domain
 **Entity (2):** trace_entity, query_archetypes
@@ -1326,3 +1463,41 @@ A typical interaction flow in an AI client:
 - **Unity Console**: Filter by `[Ember MCP]` prefix to view Bridge startup status, client connect/disconnect events, request method names, and truncated JSON content
 - **Ember MCP Window → Request Log**: Real-time display of the most recent 100 requests showing method name, response time (ms), and result preview
 - **`mcp_status` command**: Returns `running/state/reason/reloading/statusFile/statusSeq/clientCount`, useful for distinguishing Bridge stopped, Unity reloading, port busy, and no-client states
+
+---
+
+## 15. Deterministic Random and Change Log
+
+### 15.1 world.Rng
+
+```csharp
+world.SetRandomSeed(20260101);              // same seed -> same sequence
+var snapshot = world.Rng;                   // copying the struct is a snapshot
+
+var dice = world.Rng.NextInt(1, 7);         // [1, 7)
+var speed = world.Rng.NextFloat(0.8f, 1.2f);
+
+world.Rng = snapshot;                       // roll back to the sample point
+world.RestoreRandomState(state, sequence);  // or Pcg32.FromState for an exact restore
+```
+
+- PCG32, zero-allocation and Burst-friendly. `default(Pcg32)` normalises its sequence on first draw, so it never degenerates into an all-zero stream.
+- `NextInt(max)` uses rejection sampling to avoid modulo bias (bounded retries, no unbounded loop).
+- Stop calling `UnityEngine.Random` inside systems when you need to reproduce "why did it pick that one" — it cannot be snapshotted.
+
+### 15.2 Component Change Ring Buffer
+
+```csharp
+var log = world.TrackChanges<Health>(capacity: 4096);  // opt-in, per type
+world.ChangeLogTick = frame;                           // World has no frame concept; the caller stamps it
+world.SetComponent(e, new Health { Value = 5 });
+
+var change = log[log.Count - 1];
+// change.Entity / Kind / Tick / Sequence / OldValue / NewValue
+world.UntrackChanges<Health>();                        // stop tracking and drop the log
+```
+
+Covered: `SetComponent` / `AddComponent` / `RemoveComponent` (both the `Entity` and `int` overloads) and `SystemContext.Set`, which forwards into them.
+**Not covered**: `AddComponentBatch` / `RemoveComponentBatch`, ECB playback, `SetComponentRaw`, and in-place writes through `ref T`.
+
+The buffer is a fixed-size ring: writing past capacity overwrites the oldest entry, writes allocate nothing, and `TotalRecorded` counts every write including overwritten ones. Unregistered types are neither recorded nor allocated for.
