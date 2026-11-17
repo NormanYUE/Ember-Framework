@@ -2,6 +2,51 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.15.0] — Native buffer views for Jobs/Burst, capacity reservation, entity buffer API renames
+
+### Added
+
+- **`BufferView<T>`**: a fixed-capacity native buffer view that can be stored in `IJob` / `IJobParallelFor`
+  structs (including Burst). Acquire with `World.GetBufferView<T>(handle)`, return with
+  `World.ReleaseBufferView(view)`; only one view per buffer may be outstanding. The view carries a native
+  Unity lifetime token: `Length` / indexer / `ElementAt` / `RemoveAtSwapBack` go through token + lease + bounds
+  checks, while `UnsafePtr` / `UnsafePtrAt` are explicit unchecked escape hatches. `TryAppend` returns `false`
+  when full and never grows or allocates inside the loop.
+
+- **Capacity reservation**: `World.ReserveBufferCapacity<T>(handle, capacity)` for one buffer and
+  `World.ReserveBufferStoreCapacity<T>(totalElements)` for the whole store, released with
+  `World.ReleaseBufferStoreCapacityReservation<T>()`. After reservation, growth of a sibling buffer no longer
+  relocates this buffer's pointers.
+
+- **`World.IsBufferViewValid<T>` / `World.AssertBufferViewValid<T>`**: explicit pre-schedule check points.
+
+- **`BufferElementAccessor<T>.AsSpan()` / `AcquireView()` / `ReleaseView(view)`**: entity buffers can also
+  hand out a span and a Job view.
+
+- New unit tests (`BufferViewTests`, `EntityBufferStorageTests`) plus buffer storage / Job / Burst regressions
+  in the sample project.
+
+### Changed
+
+- **Entity buffer APIs renamed** (old names stay as `[Obsolete]` forwarders until the next major version):
+  `GetEntityBuffer` / `AppendEntityBufferElement` / `SetEntityBufferElement` / `RemoveEntityBufferElementAt` /
+  `ClearEntityBuffer` / `GetEntityBufferCount`. Handle-side append is now
+  `AppendBufferElement(handle, value)`; the old `AddBufferElement(handle, value)` is `[Obsolete]`.
+
+- **`BufferSpan<T>` is explicitly a snapshot**: `Length` is fixed at acquisition; re-acquire the span after
+  add/remove, clear, growth or `ResizeBuffer`. In safety-check builds a stale span throws
+  `InvalidOperationException`; release builds do not enforce it.
+
+- Entity buffers and handle buffers now share the same `BufferStore<T>` storage (native `NativeList<T>` plus a
+  range table), so growth, removal and fragmentation behave identically.
+
+### Fixed
+
+- Entity buffer growth is no longer enforced by documentation alone: in safety-check builds the store-level
+  structure version rejects access through a stale span.
+- `DestroyEntity` / `World.Dispose` pre-check outstanding `BufferView` leases before any teardown; an
+  unreleased view throws and leaves state unchanged.
+
 ## [1.14.0] — Versioned handles, pre-destroy hook, deterministic RNG and change log
 
 ### Added

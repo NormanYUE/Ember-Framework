@@ -658,7 +658,7 @@ world.DestroyBuffer<DamageRecord>(damageLog);
 
 ```csharp
 // 添加元素
-world.AddBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
+world.AppendBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
 
 // 读取
 BufferSpan<DamageRecord> span = world.GetBuffer<DamageRecord>(damageLog);
@@ -703,9 +703,66 @@ unsafe
 
 ## 7. 实体动态数组（IBufferElement）
 
-`IBufferElement` 允许**每个实体独立携带**多个同类型元素，类似 per-entity 动态数组。适用于技能列表、伤害队列、Buff 叠加等场景。底层使用托管 `List<T>`，通过 Entity 直接访问。
+`IBufferElement` 允许**每个实体独立携带**多个同类型元素，类似 per-entity 动态数组。适用于技能列表、伤害队列、Buff 叠加等场景。
 
-> 注意：`World.AddBufferElement(BufferHandle, ...)` 和 `World.AddBufferElement(Entity, ...)` 是**两个不同的方法**——前者操作 §6 的句柄式 Buffer，后者操作本条目的实体数组。签名不同，不会混淆。
+底层存储与 §6 是**同一套** `BufferStore<T>`（原生 `NativeList<T>` + 范围句柄），区别只在句柄存在谁那里：句柄式由你持有并手动销毁，实体式由 World 内部持有、随 `DestroyEntity` 自动回收。所以两边的扩容、删除、碎片策略完全一致，实体 buffer 扩容也不产生托管分配。
+
+### 7.0 两族 API 对照
+
+句柄式（§6，共享池）与实体式（§7，每实体独立）方法名前缀不同，避免同名重载误用：
+
+| 语义 | 句柄式 | 实体式 |
+| --- | --- | --- |
+| 取视图 | `GetBuffer(handle)` → `BufferSpan<T>` | `GetEntityBuffer(entity)` → `BufferElementAccessor<T>` |
+| 追加 | `AppendBufferElement(handle, v)` | `AppendEntityBufferElement(entity, v)` |
+| 设值 | `SetBufferElement(handle, i, v)` | `SetEntityBufferElement(entity, i, v)` |
+| 删除（swap-back） | `RemoveBufferElementAtSwapBack(handle, i)` | `RemoveEntityBufferElementAt(entity, i)` |
+| 清空 | `ClearBuffer(handle)` | `ClearEntityBuffer(entity)` |
+| 长度 | `GetBufferLength(handle)` | `GetEntityBufferCount(entity)` |
+| 创建 / 销毁 | `CreateBuffer` / `DestroyBuffer` | 随实体创建与销毁 |
+
+> 旧名 `GetBufferElement` / `AddBufferElement` / `RemoveBufferElementAt` / `ClearBufferElements` / `GetBufferElementCount` 保留为 `[Obsolete]` 转发，用于兼容已有调用；下一个大版本再移除。
+
+### 7.1 预分配与 Job/Burst 快速视图
+
+`BufferView<T>` 是固定容量的原生租约，可作为 Unity Job 字段。`TryAppend` 容量不足时返回 `false`，不会在循环里扩容；`RemoveAtSwapBack` 不保持顺序。容量预留、获取/归还租约与 Job 调度应放在逐元素循环之外。
+
+```csharp
+var handle = world.CreateBuffer<long>(initialCapacity: 100_000);
+world.ReserveBufferCapacity(handle, 100_000);   // setup 阶段冻结该 buffer 容量，数据区不再搬移
+// 或在 store 级别冻结：world.ReserveBufferStoreCapacity<long>(200_000);
+// 用完解除：world.ReleaseBufferStoreCapacityReservation<long>();
+
+var view = world.GetBufferView<long>(handle);
+world.AssertBufferViewValid(view);              // 调度前显式检查（IsBufferViewValid 返回 bool）
+try
+{
+    var job = new FillBufferJob { View = view };
+    job.Schedule().Complete();
+}
+finally
+{
+    world.ReleaseBufferView(view);
+}
+
+// Job 源码放在 Unity 编译的消费方程序集里。
+[BurstCompile(CompileSynchronously = true)]
+public struct FillBufferJob : IJob
+{
+    public BufferView<long> View;
+    public void Execute()
+    {
+        for (int i = 0; i < 100_000; i++)
+            if (!View.TryAppend(i)) break;
+    }
+}
+```
+
+实体访问器也可用 `AcquireView()` / `ReleaseView(view)` 获取同一存储上的租约。单线程 `IJob` 可增删元素；`IJobParallelFor` 只能在预先确定的长度内按互不重叠的下标读写，不能并行修改长度。
+
+租约持有期间，框架拒绝对应 buffer 的 World/accessor 修改、实体销毁与 World 释放；先完成 Job、再归还租约。Unity 原生容器安全检查开启时，也会拒绝在 Job 完成前释放令牌或从主线程访问在用视图。Player 关闭这些检查时，调用方仍须遵守依赖和释放顺序。`UnsafePtr` 是显式的无检查访问入口：取出的指针不得在租约归还、存储释放或 Job 仍在使用时访问。
+
+性能比较应分开报告安全索引器、批量指针和 Burst 内核；后两者的结果不代表每次调用 World API 的成本。原生内存也需要分配和释放，预分配后操作窗口的 0 GC 不包含初始化、扩容及租约获取成本。
 
 ### 定义缓冲区元素
 
@@ -722,26 +779,29 @@ public struct DamageRecord : IBufferElement
 ```csharp
 var entity = world.CreateEntity();
 
-// 添加元素
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
+// 追加元素（buffer 不存在时自动创建，容量不足按 2 的幂扩容）
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
 
-// 获取访问器
-BufferElementAccessor<DamageRecord> buffer = world.GetBufferElement<DamageRecord>(entity);
-for (int i = 0; i < buffer.Length; i++)
-    Debug.Log(buffer[i].Amount);
+// 取访问器：Add / RemoveAt / Clear 与索引器都在它上面
+BufferElementAccessor<DamageRecord> buffer = world.GetEntityBuffer<DamageRecord>(entity);
+buffer.Add(new DamageRecord { Source = attacker, Amount = 10 });
+buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };   // 值语义，赋回整元素
+int count = buffer.Length;
 
-// 修改元素
-buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };
+// 热循环：取 span（快照，增删/扩容后必须重新取）
+var span = buffer.AsSpan();
+for (int i = 0; i < span.Length; i++)
+    span[i].Amount *= 2;
 
-// 移除元素（与最后一个交换）
-world.RemoveBufferElementAt<DamageRecord>(entity, 0);
+// 删除（与最后一个交换，不保序）与清空
+buffer.RemoveAt(0);
+buffer.Clear();
 
-// 清空
-world.ClearBufferElements<DamageRecord>(entity);
-
-// 获取数量
-int count = world.GetBufferElementCount<DamageRecord>(entity);
+// 也可以只走 World 的单次接口
+int n = world.GetEntityBufferCount<DamageRecord>(entity);
+world.RemoveEntityBufferElementAt<DamageRecord>(entity, 0);
+world.ClearEntityBuffer<DamageRecord>(entity);
 ```
 
 缓冲区元素在实体销毁时自动清理。

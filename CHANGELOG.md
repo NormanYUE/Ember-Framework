@@ -2,6 +2,43 @@
 
 All notable changes to the Ember ECS Framework.
 
+## [1.15.0] — 原生 buffer 视图（Job/Burst）、容量预留与实体 buffer API 改名
+
+### Added
+
+- **`BufferView<T>`**：固定容量的原生 buffer 视图，可作为字段传给 `IJob` / `IJobParallelFor`（含 Burst）。
+  通过 `World.GetBufferView<T>(handle)` 取得、`World.ReleaseBufferView(view)` 归还；同一 buffer 同时只允许一个视图。
+  视图内含 Unity 原生生命周期令牌，`Length` / 索引器 / `ElementAt` / `RemoveAtSwapBack` 走令牌 + 租约 + 边界检查，
+  `UnsafePtr` / `UnsafePtrAt` 是显式无检查入口。`TryAppend` 容量不足返回 `false`，不会在循环里扩容或分配。
+
+- **容量预留**：`World.ReserveBufferCapacity<T>(handle, capacity)`（单个 buffer）与
+  `World.ReserveBufferStoreCapacity<T>(totalElements)`（整个 store），用
+  `World.ReleaseBufferStoreCapacityReservation<T>()` 解除。预分配后兄弟 buffer 扩容不会搬移本 buffer 的指针。
+
+- **`World.IsBufferViewValid<T>` / `World.AssertBufferViewValid<T>`**：调度前的显式检查点。
+
+- **`BufferElementAccessor<T>.AsSpan()` / `AcquireView()` / `ReleaseView(view)`**：实体 buffer 也能直接取 span 与 Job 视图。
+
+- 新增单元测试 `BufferViewTests`、`EntityBufferStorageTests`，以及示例工程的 buffer 存储 / Job / Burst 回归。
+
+### Changed
+
+- **实体 buffer API 改名**（旧名保留为 `[Obsolete]` 转发，下一个大版本移除）：
+  `GetEntityBuffer` / `AppendEntityBufferElement` / `SetEntityBufferElement` / `RemoveEntityBufferElementAt` /
+  `ClearEntityBuffer` / `GetEntityBufferCount`。句柄式追加改为 `AppendBufferElement(handle, value)`，
+  旧名 `AddBufferElement(handle, value)` 标记 `[Obsolete]`。
+
+- **`BufferSpan<T>` 明确为快照语义**：`Length` 在取得时固定；增删、清空、扩容、`ResizeBuffer` 后必须重新获取。
+  开启安全检查的构建里使用过期 span 会抛 `InvalidOperationException`，发布构建不强制。
+
+- 实体 buffer 与句柄式 buffer 共用同一套 `BufferStore<T>` 存储（原生 `NativeList<T>` + 范围表），
+  扩容、删除、碎片策略一致。
+
+### Fixed
+
+- 实体 buffer 扩容不再靠文档约定：安全检查构建下，store 级结构版本会拒绝过期 span 的访问。
+- `DestroyEntity` / `World.Dispose` 在 teardown 之前预检未归还的 `BufferView` 租约；有未归还视图时抛异常且状态不变。
+
 ## [1.14.0] — 版本感知句柄、销毁前置钩子、确定性随机与变更记录
 
 ### Added

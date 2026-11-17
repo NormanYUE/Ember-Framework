@@ -658,7 +658,7 @@ world.DestroyBuffer<DamageRecord>(damageLog);
 
 ```csharp
 // Add an element
-world.AddBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
+world.AppendBufferElement(damageLog, new DamageRecord { Target = entity, Amount = 50 });
 
 // Read
 BufferSpan<DamageRecord> span = world.GetBuffer<DamageRecord>(damageLog);
@@ -703,9 +703,66 @@ unsafe
 
 ## 7. Entity Dynamic Arrays (IBufferElement)
 
-`IBufferElement` allows **each entity** to independently carry multiple elements of the same type — analogous to per-entity dynamic arrays. Suitable for skill lists, damage queues, buff stacking, etc. Backed by a managed `List<T>` internally, accessed directly via Entity.
+`IBufferElement` allows **each entity** to independently carry multiple elements of the same type — analogous to per-entity dynamic arrays. Suitable for skill lists, damage queues, buff stacking, etc.
 
-> Note: `World.AddBufferElement(BufferHandle, ...)` and `World.AddBufferElement(Entity, ...)` are **two different methods** — the former operates on Section 6 handle-based buffers, the latter on per-entity buffers described in this section. Signatures differ and are unambiguous.
+Storage is the **same** `BufferStore<T>` as Section 6 (native `NativeList<T>` + range handles). The only difference is who holds the handle: for handle-based buffers you hold it and destroy it explicitly; for entity buffers the World holds it and releases it on `DestroyEntity`. Growth, removal and fragmentation behaviour are therefore identical, and growing an entity buffer allocates no managed memory.
+
+### 7.0 API Family Mapping
+
+Handle-based (Section 6, shared pool) and entity-based (Section 7, per-entity) methods use different prefixes so the two never collide:
+
+| Semantics | Handle-based | Entity-based |
+| --- | --- | --- |
+| View | `GetBuffer(handle)` → `BufferSpan<T>` | `GetEntityBuffer(entity)` → `BufferElementAccessor<T>` |
+| Append | `AppendBufferElement(handle, v)` | `AppendEntityBufferElement(entity, v)` |
+| Set | `SetBufferElement(handle, i, v)` | `SetEntityBufferElement(entity, i, v)` |
+| Remove (swap-back) | `RemoveBufferElementAtSwapBack(handle, i)` | `RemoveEntityBufferElementAt(entity, i)` |
+| Clear | `ClearBuffer(handle)` | `ClearEntityBuffer(entity)` |
+| Length | `GetBufferLength(handle)` | `GetEntityBufferCount(entity)` |
+| Create / destroy | `CreateBuffer` / `DestroyBuffer` | tied to entity creation/destruction |
+
+> The old `GetBufferElement` / `AddBufferElement` / `RemoveBufferElementAt` / `ClearBufferElements` / `GetBufferElementCount` names remain as `[Obsolete]` forwarding aliases for compatibility. Removal is deferred to the next major version.
+
+### 7.1 Preallocated Job/Burst views
+
+`BufferView<T>` is a fixed-capacity native lease that can be stored in a Unity Job. `TryAppend` returns `false` when full and never grows storage inside the loop. `RemoveAtSwapBack` does not preserve order. Reserve capacity, acquire/release the lease and schedule Jobs outside the per-element loop.
+
+```csharp
+var handle = world.CreateBuffer<long>(initialCapacity: 100_000);
+world.ReserveBufferCapacity(handle, 100_000);   // freeze this buffer during setup so storage never relocates
+// Or freeze the whole store: world.ReserveBufferStoreCapacity<long>(200_000);
+// Release when done: world.ReleaseBufferStoreCapacityReservation<long>();
+
+var view = world.GetBufferView<long>(handle);
+world.AssertBufferViewValid(view);              // explicit pre-schedule check (IsBufferViewValid returns bool)
+try
+{
+    var job = new FillBufferJob { View = view };
+    job.Schedule().Complete();
+}
+finally
+{
+    world.ReleaseBufferView(view);
+}
+
+// Keep Job source in a Unity-compiled consumer assembly.
+[BurstCompile(CompileSynchronously = true)]
+public struct FillBufferJob : IJob
+{
+    public BufferView<long> View;
+    public void Execute()
+    {
+        for (int i = 0; i < 100_000; i++)
+            if (!View.TryAppend(i)) break;
+    }
+}
+```
+
+Entity accessors also expose `AcquireView()` / `ReleaseView(view)` over the same storage. A serial `IJob` may append/remove elements. An `IJobParallelFor` may only access distinct fixed indices within a length established before scheduling; parallel length changes are not supported.
+
+While a lease is outstanding, corresponding World/accessor mutations, entity destruction and World disposal are rejected. Complete the Job before releasing its view. With Unity native collection safety checks enabled, disposing the token early or accessing an in-use view from the main thread is also rejected. Players with these checks disabled still require the caller to obey dependencies and release order. `UnsafePtr` explicitly bypasses checks: do not access escaped pointers after releasing the lease or storage, or concurrently with a Job that uses them.
+
+Report checked indexing, batch pointer access and Burst kernels separately; their results do not represent repeated World API calls. Native memory still has allocation/disposal costs. A zero-GC preallocated operation window excludes initialization, growth and lease acquisition.
 
 ### Defining Buffer Elements
 
@@ -722,26 +779,29 @@ public struct DamageRecord : IBufferElement
 ```csharp
 var entity = world.CreateEntity();
 
-// Add elements
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
-world.AddBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
+// Append elements (the buffer is created on demand and grows by powers of two)
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 50 });
+world.AppendEntityBufferElement(entity, new DamageRecord { Source = attacker, Amount = 30 });
 
-// Get accessor
-BufferElementAccessor<DamageRecord> buffer = world.GetBufferElement<DamageRecord>(entity);
-for (int i = 0; i < buffer.Length; i++)
-    Debug.Log(buffer[i].Amount);
+// Get the accessor: Add / RemoveAt / Clear and the indexer live on it
+BufferElementAccessor<DamageRecord> buffer = world.GetEntityBuffer<DamageRecord>(entity);
+buffer.Add(new DamageRecord { Source = attacker, Amount = 10 });
+buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };   // value semantics: assign the whole element
+int count = buffer.Length;
 
-// Modify element
-buffer[0] = new DamageRecord { Source = attacker, Amount = 100 };
+// Hot loop: take a snapshot span (re-acquire after add/remove/growth)
+var span = buffer.AsSpan();
+for (int i = 0; i < span.Length; i++)
+    span[i].Amount *= 2;
 
-// Remove element (swap-back with last)
-world.RemoveBufferElementAt<DamageRecord>(entity, 0);
+// Remove (swap-back, order is not preserved) and clear
+buffer.RemoveAt(0);
+buffer.Clear();
 
-// Clear
-world.ClearBufferElements<DamageRecord>(entity);
-
-// Get count
-int count = world.GetBufferElementCount<DamageRecord>(entity);
+// The World-level one-shot calls are also available
+int n = world.GetEntityBufferCount<DamageRecord>(entity);
+world.RemoveEntityBufferElementAt<DamageRecord>(entity, 0);
+world.ClearEntityBuffer<DamageRecord>(entity);
 ```
 
 Buffer elements are automatically cleaned up when the entity is destroyed.
